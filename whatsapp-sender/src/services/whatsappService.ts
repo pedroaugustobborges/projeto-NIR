@@ -2,15 +2,22 @@
  * WhatsApp API Service
  *
  * This service integrates with the Colmeia API for sending WhatsApp messages.
+ * Implements proper token generation and auto-refresh.
  */
 
-// Colmeia API Configuration
+// Colmeia API Configuration from environment variables
 const COLMEIA_CONFIG = {
   baseUrl: "https://api.colmeia.me/v1/rest",
-  socialNetworkId: "oFzvyMeL6e8ALfPc4DPQICNTwWhuU9", // HECAD
-  authToken: "WPUgUAzy8wH7DmYGQEgBys6JDEfEDcd5", // Dashboard token (used directly)
-  idCampaignAction: "DGQDLxrnXeOblrzzCLeLrnld4juX8h",
+  socialNetworkId: import.meta.env.VITE_COLMEIA_SOCIAL_NETWORK_ID || "",
+  tokenId: import.meta.env.VITE_COLMEIA_TOKEN_ID || "",
+  email: import.meta.env.VITE_COLMEIA_EMAIL || "",
+  password: import.meta.env.VITE_COLMEIA_PASSWORD || "",
+  idCampaignAction: import.meta.env.VITE_COLMEIA_CAMPAIGN_ACTION_ID || "",
 };
+
+// Token cache
+let cachedAuthToken: string | null = null;
+let tokenExpiresAt: number | null = null;
 
 interface SendIndividualParams {
   phone: string;
@@ -23,6 +30,87 @@ interface SendMessageResult {
   message: string;
 }
 
+interface ColmeiaTokenResponse {
+  token: string;
+  type?: string;
+  status?: number;
+}
+
+/**
+ * Hash password using SHA256 (uppercase hex)
+ */
+async function hashPassword(password: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return hashHex.toUpperCase();
+}
+
+/**
+ * Generate authentication token from Colmeia API
+ */
+async function generateToken(): Promise<string> {
+  console.log("[Colmeia] Generating new authentication token...");
+
+  if (!COLMEIA_CONFIG.tokenId || !COLMEIA_CONFIG.email || !COLMEIA_CONFIG.password) {
+    throw new Error(
+      "Credenciais da Colmeia não configuradas. Verifique as variáveis de ambiente."
+    );
+  }
+
+  const hashedPassword = await hashPassword(COLMEIA_CONFIG.password);
+
+  const response = await fetch(`${COLMEIA_CONFIG.baseUrl}/generate-token`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      idSocialNetwork: COLMEIA_CONFIG.socialNetworkId,
+    },
+    body: JSON.stringify({
+      idTokenToRefresh: COLMEIA_CONFIG.tokenId,
+      email: COLMEIA_CONFIG.email,
+      password: hashedPassword,
+    }),
+  });
+
+  const responseText = await response.text();
+  console.log("[Colmeia] Token generation response:", response.status, responseText);
+
+  if (!response.ok) {
+    throw new Error(`Falha na autenticação: ${response.status} - ${responseText}`);
+  }
+
+  const data: ColmeiaTokenResponse = JSON.parse(responseText);
+
+  if (!data.token) {
+    throw new Error("Token não retornado pela API");
+  }
+
+  // Cache token for 55 minutes (token expires in 1 hour)
+  cachedAuthToken = data.token;
+  tokenExpiresAt = Date.now() + 55 * 60 * 1000;
+
+  console.log("[Colmeia] Token generated successfully");
+  return data.token;
+}
+
+/**
+ * Get valid authentication token (generates new one if expired)
+ */
+async function getAuthToken(): Promise<string> {
+  // Check if we have a valid cached token
+  if (cachedAuthToken && tokenExpiresAt && Date.now() < tokenExpiresAt) {
+    return cachedAuthToken;
+  }
+
+  // Generate new token
+  return generateToken();
+}
+
 /**
  * Send campaign via Colmeia API
  */
@@ -33,39 +121,91 @@ async function sendCampaign(
   }>
 ): Promise<SendMessageResult> {
   console.log("[Colmeia] Sending campaign to", contacts.length, "contacts");
-  console.log("[Colmeia] Using token:", COLMEIA_CONFIG.authToken);
   console.log("[Colmeia] Contact list:", JSON.stringify(contacts, null, 2));
 
-  const response = await fetch(
-    `${COLMEIA_CONFIG.baseUrl}/marketing-send-campaign`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: COLMEIA_CONFIG.authToken,
-        idSocialNetwork: COLMEIA_CONFIG.socialNetworkId,
-      },
-      body: JSON.stringify({
-        idCampaignAction: COLMEIA_CONFIG.idCampaignAction,
-        contactList: contacts,
-      }),
+  try {
+    const authToken = await getAuthToken();
+    console.log("[Colmeia] Using token:", authToken.substring(0, 10) + "...");
+
+    const response = await fetch(
+      `${COLMEIA_CONFIG.baseUrl}/marketing-send-campaign`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: authToken,
+          idSocialNetwork: COLMEIA_CONFIG.socialNetworkId,
+        },
+        body: JSON.stringify({
+          idCampaignAction: COLMEIA_CONFIG.idCampaignAction,
+          contactList: contacts,
+        }),
+      }
+    );
+
+    const responseText = await response.text();
+    console.log("[Colmeia] Response:", response.status, responseText);
+
+    if (!response.ok) {
+      // If unauthorized, try to refresh token and retry once
+      if (response.status === 401) {
+        console.log("[Colmeia] Token expired, refreshing...");
+        cachedAuthToken = null;
+        tokenExpiresAt = null;
+
+        const newToken = await getAuthToken();
+        const retryResponse = await fetch(
+          `${COLMEIA_CONFIG.baseUrl}/marketing-send-campaign`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: newToken,
+              idSocialNetwork: COLMEIA_CONFIG.socialNetworkId,
+            },
+            body: JSON.stringify({
+              idCampaignAction: COLMEIA_CONFIG.idCampaignAction,
+              contactList: contacts,
+            }),
+          }
+        );
+
+        const retryText = await retryResponse.text();
+        console.log("[Colmeia] Retry response:", retryResponse.status, retryText);
+
+        if (!retryResponse.ok) {
+          return {
+            success: false,
+            message: `Erro da API Colmeia: ${retryResponse.status} - ${retryText}`,
+          };
+        }
+
+        return {
+          success: true,
+          message: "Mensagem enviada com sucesso via WhatsApp",
+        };
+      }
+
+      return {
+        success: false,
+        message: `Erro da API Colmeia: ${response.status} - ${responseText}`,
+      };
     }
-  );
 
-  const responseText = await response.text();
-  console.log("[Colmeia] Response:", response.status, responseText);
-
-  if (!response.ok) {
+    return {
+      success: true,
+      message: "Mensagem enviada com sucesso via WhatsApp",
+    };
+  } catch (error) {
+    console.error("[Colmeia] Error in sendCampaign:", error);
     return {
       success: false,
-      message: `Erro da API Colmeia: ${response.status} - ${responseText}`,
+      message:
+        error instanceof Error
+          ? error.message
+          : "Erro desconhecido ao enviar campanha",
     };
   }
-
-  return {
-    success: true,
-    message: "Mensagem enviada com sucesso via WhatsApp",
-  };
 }
 
 export const whatsappService = {
@@ -89,12 +229,11 @@ export const whatsappService = {
       if (cleanPhone.length < 12 || cleanPhone.length > 13) {
         return {
           success: false,
-          message: "Numero de telefone invalido",
+          message: "Número de telefone inválido",
         };
       }
 
       // Build contact object with parameters
-      // Parameters are passed with their actual field names (e.g., "nome", "especialidade")
       const contact: Record<string, string> = {
         celular: cleanPhone,
         ...parameters,
@@ -107,7 +246,6 @@ export const whatsappService = {
         contact
       );
 
-      // Send campaign directly using dashboard token
       const result = await sendCampaign([contact]);
 
       return result;
@@ -162,7 +300,6 @@ export const whatsappService = {
         "contacts"
       );
 
-      // Send campaign directly using dashboard token
       const result = await sendCampaign(colmeiaContacts);
 
       if (result.success) {
@@ -203,5 +340,14 @@ export const whatsappService = {
   isValidPhone(phone: string): boolean {
     const clean = phone.replace(/\D/g, "");
     return clean.length >= 10 && clean.length <= 13;
+  },
+
+  /**
+   * Force token refresh (useful for debugging)
+   */
+  async refreshToken(): Promise<void> {
+    cachedAuthToken = null;
+    tokenExpiresAt = null;
+    await getAuthToken();
   },
 };
