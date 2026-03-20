@@ -54,6 +54,7 @@ tmp/
 *.xlsx
 data/
 
-# HTML files (saved documentation)
-*.html
+# HTML files (saved documentation - but not app entry points)
+/*.html
 *_files/
+!whatsapp-sender/index.html
