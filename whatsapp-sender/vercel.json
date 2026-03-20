@@ -1,3 +1,5 @@
 {
-  "framework": "vite"
+  "framework": "vite",
+  "installCommand": "npm install && chmod -R +x node_modules/.bin || true",
+  "buildCommand": "npm run build"
 }

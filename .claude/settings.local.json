@@ -9,7 +9,8 @@
       "Bash(ping:*)",
       "Bash(del \"C:\\\\Users\\\\16144-pedro\\\\Documents\\\\python_projects\\\\projeto-nir\\\\vercel.json\")",
       "Bash(del \"C:\\\\Users\\\\16144-pedro\\\\Documents\\\\python_projects\\\\projeto-nir\\\\.vercelignore\")",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(yarn install)"
     ]
   }
 }
