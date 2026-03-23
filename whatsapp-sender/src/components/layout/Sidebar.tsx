@@ -73,21 +73,26 @@ export default function Sidebar() {
     <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-colors duration-300">
       {/* Logo */}
       <div className="h-16 flex items-center gap-3 px-6 border-b border-gray-200 dark:border-gray-700">
+        {" "}
         <div className="w-10 h-10 bg-gradient-to-br from-whatsapp-light to-whatsapp-dark rounded-lg flex items-center justify-center shadow-lg">
-          <MessageCircle className="w-6 h-6 text-white" />
-        </div>
+          {" "}
+          <MessageCircle className="w-6 h-6 text-white" />{" "}
+        </div>{" "}
         <div>
-          <h1 className="font-bold text-gray-900 dark:text-white">WhatsApp</h1>
+          {" "}
+          <h1 className="font-bold text-gray-900 dark:text-white">
+            WhatsApp
+          </h1>{" "}
           <p className="text-xs text-gray-500 dark:text-gray-400">
             Sistema de Disparo
-          </p>
-        </div>
+          </p>{" "}
+        </div>{" "}
       </div>
 
       {/* Navigation */}
       <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
         <div className="mb-2">
-          <p className="px-4 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+          <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider text-center">
             Menu
           </p>
         </div>
@@ -141,7 +146,7 @@ export default function Sidebar() {
         {/* Theme Toggle */}
         <button
           onClick={toggleTheme}
-          className="w-full flex items-center gap-3 px-4 py-2 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          className="justify-center w-full flex items-center gap-3 px-4 py-2 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
         >
           {isDark ? (
             <>
@@ -176,7 +181,7 @@ export default function Sidebar() {
         {/* Logout Button */}
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-4 py-2 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+          className="w-full flex items-center justify-center gap-3 px-4 py-2 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
         >
           <LogOut className="w-5 h-5" />
           <span>Sair</span>
