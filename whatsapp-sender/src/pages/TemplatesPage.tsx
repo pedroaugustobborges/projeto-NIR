@@ -1,11 +1,18 @@
 import { useState, useEffect } from 'react';
-import { Plus, Pencil, Trash2, Image } from 'lucide-react';
+import { Plus, Pencil, Trash2, Image, Building2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { Template, TemplateFormData } from '../types';
+import { Template, TemplateFormData, HOSPITALS } from '../types';
 import { templateService } from '../services/templateService';
 import { Button, Modal, Table } from '../components/ui';
 import TemplateForm from '../components/templates/TemplateForm';
 import Layout from '../components/layout/Layout';
+
+// Helper function to get hospital name from ID
+const getHospitalName = (hospitalId?: string | null): string | null => {
+  if (!hospitalId) return null;
+  const hospital = HOSPITALS.find(h => h.id === hospitalId);
+  return hospital?.name || null;
+};
 
 export default function TemplatesPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -111,6 +118,25 @@ export default function TemplatesPage() {
           <span className="font-medium text-gray-900 dark:text-white">{template.name}</span>
         </div>
       ),
+    },
+    {
+      key: 'hospital',
+      header: 'Hospital',
+      render: (template: Template) => {
+        const hospitalName = getHospitalName(template.hospital_id);
+        return hospitalName ? (
+          <div className="flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-blue-500" />
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
+              {hospitalName}
+            </span>
+          </div>
+        ) : (
+          <span className="text-sm text-gray-400 dark:text-gray-500 italic">
+            Não configurado
+          </span>
+        );
+      },
     },
     {
       key: 'parameters',

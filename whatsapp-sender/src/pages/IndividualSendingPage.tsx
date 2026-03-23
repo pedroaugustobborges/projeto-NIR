@@ -1,12 +1,19 @@
 import { useState, useEffect } from 'react';
-import { Send, CheckCircle2 } from 'lucide-react';
+import { Send, CheckCircle2, AlertTriangle, Building2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { Template } from '../types';
+import { Template, HOSPITALS } from '../types';
 import { templateService } from '../services/templateService';
 import { whatsappService } from '../services/whatsappService';
 import { historyService } from '../services/historyService';
 import { Button, Input, Select } from '../components/ui';
 import Layout from '../components/layout/Layout';
+
+// Helper function to get hospital name from ID
+const getHospitalName = (hospitalId?: string | null): string | null => {
+  if (!hospitalId) return null;
+  const hospital = HOSPITALS.find(h => h.id === hospitalId);
+  return hospital?.name || null;
+};
 
 export default function IndividualSendingPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -38,13 +45,13 @@ export default function IndividualSendingPage() {
 
   const getTemplateParameters = (template: Template): { key: string; label: string }[] => {
     const params: { key: string; label: string }[] = [];
-    // Use the actual parameter name (lowercase) as the key for Colmeia API
-    if (template.parameter_1) params.push({ key: template.parameter_1.toLowerCase(), label: template.parameter_1 });
-    if (template.parameter_2) params.push({ key: template.parameter_2.toLowerCase(), label: template.parameter_2 });
-    if (template.parameter_3) params.push({ key: template.parameter_3.toLowerCase(), label: template.parameter_3 });
-    if (template.parameter_4) params.push({ key: template.parameter_4.toLowerCase(), label: template.parameter_4 });
-    if (template.parameter_5) params.push({ key: template.parameter_5.toLowerCase(), label: template.parameter_5 });
-    if (template.parameter_6) params.push({ key: template.parameter_6.toLowerCase(), label: template.parameter_6 });
+    // Use the exact parameter name as the key for Colmeia API (case-sensitive)
+    if (template.parameter_1) params.push({ key: template.parameter_1, label: template.parameter_1 });
+    if (template.parameter_2) params.push({ key: template.parameter_2, label: template.parameter_2 });
+    if (template.parameter_3) params.push({ key: template.parameter_3, label: template.parameter_3 });
+    if (template.parameter_4) params.push({ key: template.parameter_4, label: template.parameter_4 });
+    if (template.parameter_5) params.push({ key: template.parameter_5, label: template.parameter_5 });
+    if (template.parameter_6) params.push({ key: template.parameter_6, label: template.parameter_6 });
     return params;
   };
 
@@ -103,11 +110,13 @@ export default function IndividualSendingPage() {
 
       const phoneDigits = phone.replace(/\D/g, '');
 
-      // Send message via WhatsApp API
+      // Send message via WhatsApp API with template's hospital and campaign configuration
       await whatsappService.sendIndividual({
         phone: phoneDigits,
         templateId: selectedTemplateId,
         parameters,
+        hospitalId: selectedTemplate.hospital_id || undefined,
+        campaignActionId: selectedTemplate.campaign_action_id || undefined,
       });
 
       // Log to history
@@ -139,6 +148,10 @@ export default function IndividualSendingPage() {
 
   const templateParams = selectedTemplate ? getTemplateParameters(selectedTemplate) : [];
 
+  // Check if template has proper Colmeia configuration
+  const hasColmeiaConfig = selectedTemplate?.hospital_id && selectedTemplate?.campaign_action_id;
+  const hospitalName = selectedTemplate ? getHospitalName(selectedTemplate.hospital_id) : null;
+
   return (
     <Layout>
       <div className="max-w-2xl mx-auto space-y-6">
@@ -162,6 +175,33 @@ export default function IndividualSendingPage() {
               disabled={templatesLoading || loading}
               required
             />
+
+            {/* Template configuration indicator */}
+            {selectedTemplate && (
+              hasColmeiaConfig ? (
+                <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                  <Building2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  <div className="flex-1">
+                    <span className="text-sm text-blue-800 dark:text-blue-300">
+                      Hospital: <strong>{hospitalName}</strong>
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                      Configuração incompleta
+                    </p>
+                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                      Este template não possui hospital/campanha configurados.
+                      Edite o template para definir essas configurações.
+                    </p>
+                  </div>
+                </div>
+              )
+            )}
 
             <Input
               label="Telefone"

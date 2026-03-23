@@ -2,7 +2,7 @@ import requests
 import json
 
 # ========================================
-# CONFIGURAÇÕES DA API - ATUALIZE AQUI!
+# CONFIGURAÇÕES DA API
 # ========================================
 API_URL = 'https://api.colmeia.me/v1/rest/marketing-send-campaign'
 ID_SOCIAL_NETWORK = 'oFzvyMeL6e8ALfPc4DPQICNTwWhuU9' #HECAD

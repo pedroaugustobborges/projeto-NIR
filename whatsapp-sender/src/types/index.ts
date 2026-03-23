@@ -1,7 +1,23 @@
+// Hospital configuration for Colmeia API
+export interface HospitalConfig {
+  id: string;
+  name: string;
+  socialNetworkId: string;
+}
+
+export const HOSPITALS: HospitalConfig[] = [
+  { id: 'hecad', name: 'HECAD', socialNetworkId: 'oFzvyMeL6e8ALfPc4DPQlCNTwWhuU9' },
+  { id: 'crer', name: 'CRER', socialNetworkId: 'K36LwFWX0tIrMjmRm643PqLSziJ9pU' },
+  { id: 'hds', name: 'HDS', socialNetworkId: 'SHieySEXmlspZdFQ31Dd7bEuqkSUHr' },
+  { id: 'hugol', name: 'HUGOL', socialNetworkId: 'riOMRFeqi2QEwz3QT0PVQEK8YbtTle' },
+];
+
 // Template Types
 export interface Template {
   id: string;
   name: string;
+  hospital_id?: string | null;
+  campaign_action_id?: string | null;
   parameter_1?: string | null;
   parameter_2?: string | null;
   parameter_3?: string | null;
@@ -15,6 +31,8 @@ export interface Template {
 
 export interface TemplateFormData {
   name: string;
+  hospital_id?: string;
+  campaign_action_id?: string;
   parameter_1?: string;
   parameter_2?: string;
   parameter_3?: string;

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Template, TemplateFormData } from '../../types';
-import { Button, Input, FileUpload } from '../ui';
+import { Building2 } from 'lucide-react';
+import { Template, TemplateFormData, HOSPITALS } from '../../types';
+import { Button, Input, FileUpload, Select } from '../ui';
 
 interface TemplateFormProps {
   template?: Template | null;
@@ -26,6 +27,8 @@ export default function TemplateForm({
 }: TemplateFormProps) {
   const [formData, setFormData] = useState<TemplateFormData>({
     name: '',
+    hospital_id: '',
+    campaign_action_id: '',
     parameter_1: '',
     parameter_2: '',
     parameter_3: '',
@@ -41,6 +44,8 @@ export default function TemplateForm({
     if (template) {
       setFormData({
         name: template.name,
+        hospital_id: template.hospital_id || '',
+        campaign_action_id: template.campaign_action_id || '',
         parameter_1: template.parameter_1 || '',
         parameter_2: template.parameter_2 || '',
         parameter_3: template.parameter_3 || '',
@@ -83,9 +88,24 @@ export default function TemplateForm({
       newErrors.name = 'Nome do template é obrigatório';
     }
 
+    if (!formData.hospital_id) {
+      newErrors.hospital_id = 'Selecione um hospital';
+    }
+
+    if (!formData.campaign_action_id?.trim()) {
+      newErrors.campaign_action_id = 'ID da campanha é obrigatório';
+    } else if (formData.campaign_action_id.trim().length < 28 || formData.campaign_action_id.trim().length > 32) {
+      newErrors.campaign_action_id = 'ID da campanha deve ter entre 28 e 32 caracteres';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
+
+  const hospitalOptions = HOSPITALS.map((h) => ({
+    value: h.id,
+    label: h.name,
+  }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,6 +127,38 @@ export default function TemplateForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Configuração Colmeia */}
+      <div className="space-y-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+        <div className="flex items-center gap-2 mb-3">
+          <Building2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+          <h3 className="text-sm font-semibold text-blue-800 dark:text-blue-300">
+            Configuração da Campanha Colmeia
+          </h3>
+        </div>
+
+        <Select
+          label="Hospital"
+          options={hospitalOptions}
+          value={formData.hospital_id || ''}
+          onChange={(e) => handleChange('hospital_id', e.target.value)}
+          placeholder="Selecione o hospital"
+          error={errors.hospital_id}
+          required
+          disabled={loading}
+        />
+
+        <Input
+          label="ID da Campanha"
+          value={formData.campaign_action_id || ''}
+          onChange={(e) => handleChange('campaign_action_id', e.target.value)}
+          placeholder="Ex: DGQDLxrnXeOblrzzCLeLrnld4juX8h"
+          error={errors.campaign_action_id}
+          hint="ID de 28-32 caracteres fornecido pela Colmeia para esta campanha"
+          required
+          disabled={loading}
+        />
+      </div>
+
       <Input
         label="Nome do Template"
         value={formData.name}

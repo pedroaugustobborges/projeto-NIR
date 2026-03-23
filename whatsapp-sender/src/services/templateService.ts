@@ -53,6 +53,8 @@ export const templateService = {
       .from('templates')
       .insert({
         name: formData.name,
+        hospital_id: formData.hospital_id || null,
+        campaign_action_id: formData.campaign_action_id || null,
         parameter_1: formData.parameter_1 || null,
         parameter_2: formData.parameter_2 || null,
         parameter_3: formData.parameter_3 || null,
@@ -100,6 +102,8 @@ export const templateService = {
 
     const updateData: Partial<Template> = {
       name: formData.name,
+      hospital_id: formData.hospital_id || null,
+      campaign_action_id: formData.campaign_action_id || null,
       parameter_1: formData.parameter_1 || null,
       parameter_2: formData.parameter_2 || null,
       parameter_3: formData.parameter_3 || null,

@@ -3,26 +3,31 @@
  *
  * This service integrates with the Colmeia API for sending WhatsApp messages.
  * Implements proper token generation and auto-refresh.
+ * Supports dynamic hospital/campaign configuration per template.
  */
+
+import { HOSPITALS } from '../types';
 
 // Colmeia API Configuration from environment variables
 const COLMEIA_CONFIG = {
   baseUrl: "https://api.colmeia.me/v1/rest",
-  socialNetworkId: import.meta.env.VITE_COLMEIA_SOCIAL_NETWORK_ID || "",
   tokenId: import.meta.env.VITE_COLMEIA_TOKEN_ID || "",
   email: import.meta.env.VITE_COLMEIA_EMAIL || "",
   password: import.meta.env.VITE_COLMEIA_PASSWORD || "",
+  // Default values (fallback for backward compatibility)
+  socialNetworkId: import.meta.env.VITE_COLMEIA_SOCIAL_NETWORK_ID || "",
   idCampaignAction: import.meta.env.VITE_COLMEIA_CAMPAIGN_ACTION_ID || "",
 };
 
-// Token cache
-let cachedAuthToken: string | null = null;
-let tokenExpiresAt: number | null = null;
+// Token cache - now keyed by socialNetworkId for multiple hospitals
+const tokenCache: Map<string, { token: string; expiresAt: number }> = new Map();
 
 interface SendIndividualParams {
   phone: string;
   templateId: string;
   parameters: Record<string, string>;
+  hospitalId?: string;
+  campaignActionId?: string;
 }
 
 interface SendMessageResult {
@@ -51,10 +56,22 @@ async function hashPassword(password: string): Promise<string> {
 }
 
 /**
+ * Get the social network ID for a hospital
+ */
+function getSocialNetworkId(hospitalId?: string): string {
+  if (!hospitalId) {
+    return COLMEIA_CONFIG.socialNetworkId;
+  }
+
+  const hospital = HOSPITALS.find(h => h.id === hospitalId);
+  return hospital?.socialNetworkId || COLMEIA_CONFIG.socialNetworkId;
+}
+
+/**
  * Generate authentication token from Colmeia API
  */
-async function generateToken(): Promise<string> {
-  console.log("[Colmeia] Generating new authentication token...");
+async function generateToken(socialNetworkId: string): Promise<string> {
+  console.log("[Colmeia] Generating new authentication token for socialNetworkId:", socialNetworkId);
 
   if (!COLMEIA_CONFIG.tokenId || !COLMEIA_CONFIG.email || !COLMEIA_CONFIG.password) {
     throw new Error(
@@ -68,7 +85,7 @@ async function generateToken(): Promise<string> {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      idSocialNetwork: COLMEIA_CONFIG.socialNetworkId,
+      idSocialNetwork: socialNetworkId,
     },
     body: JSON.stringify({
       idTokenToRefresh: COLMEIA_CONFIG.tokenId,
@@ -91,43 +108,58 @@ async function generateToken(): Promise<string> {
   }
 
   // Cache token for 55 minutes (token expires in 1 hour)
-  cachedAuthToken = data.token;
-  tokenExpiresAt = Date.now() + 55 * 60 * 1000;
+  tokenCache.set(socialNetworkId, {
+    token: data.token,
+    expiresAt: Date.now() + 55 * 60 * 1000,
+  });
 
-  console.log("[Colmeia] Token generated successfully");
+  console.log("[Colmeia] Token generated successfully for:", socialNetworkId);
   return data.token;
 }
 
 /**
  * Get valid authentication token (generates new one if expired)
  */
-async function getAuthToken(): Promise<string> {
-  // Check if we have a valid cached token
-  if (cachedAuthToken && tokenExpiresAt && Date.now() < tokenExpiresAt) {
-    return cachedAuthToken;
+async function getAuthToken(socialNetworkId: string): Promise<string> {
+  // Check if we have a valid cached token for this socialNetworkId
+  const cached = tokenCache.get(socialNetworkId);
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.token;
   }
 
   // Generate new token
-  return generateToken();
+  return generateToken(socialNetworkId);
 }
 
 // Contact type for Colmeia API
 interface ColmeiaContact {
-  celular: string;
+  Celular: string;
   [key: string]: string;
+}
+
+// Campaign configuration for dynamic sending
+interface CampaignConfig {
+  socialNetworkId: string;
+  campaignActionId: string;
 }
 
 /**
  * Send campaign via Colmeia API
  */
 async function sendCampaign(
-  contacts: ColmeiaContact[]
+  contacts: ColmeiaContact[],
+  config?: CampaignConfig
 ): Promise<SendMessageResult> {
+  const socialNetworkId = config?.socialNetworkId || COLMEIA_CONFIG.socialNetworkId;
+  const campaignActionId = config?.campaignActionId || COLMEIA_CONFIG.idCampaignAction;
+
   console.log("[Colmeia] Sending campaign to", contacts.length, "contacts");
+  console.log("[Colmeia] Using socialNetworkId:", socialNetworkId);
+  console.log("[Colmeia] Using campaignActionId:", campaignActionId);
   console.log("[Colmeia] Contact list:", JSON.stringify(contacts, null, 2));
 
   try {
-    const authToken = await getAuthToken();
+    const authToken = await getAuthToken(socialNetworkId);
     console.log("[Colmeia] Using token:", authToken.substring(0, 10) + "...");
 
     const response = await fetch(
@@ -137,10 +169,10 @@ async function sendCampaign(
         headers: {
           "Content-Type": "application/json",
           Authorization: authToken,
-          idSocialNetwork: COLMEIA_CONFIG.socialNetworkId,
+          idSocialNetwork: socialNetworkId,
         },
         body: JSON.stringify({
-          idCampaignAction: COLMEIA_CONFIG.idCampaignAction,
+          idCampaignAction: campaignActionId,
           contactList: contacts,
         }),
       }
@@ -153,10 +185,9 @@ async function sendCampaign(
       // If unauthorized, try to refresh token and retry once
       if (response.status === 401) {
         console.log("[Colmeia] Token expired, refreshing...");
-        cachedAuthToken = null;
-        tokenExpiresAt = null;
+        tokenCache.delete(socialNetworkId);
 
-        const newToken = await getAuthToken();
+        const newToken = await getAuthToken(socialNetworkId);
         const retryResponse = await fetch(
           `${COLMEIA_CONFIG.baseUrl}/marketing-send-campaign`,
           {
@@ -164,10 +195,10 @@ async function sendCampaign(
             headers: {
               "Content-Type": "application/json",
               Authorization: newToken,
-              idSocialNetwork: COLMEIA_CONFIG.socialNetworkId,
+              idSocialNetwork: socialNetworkId,
             },
             body: JSON.stringify({
-              idCampaignAction: COLMEIA_CONFIG.idCampaignAction,
+              idCampaignAction: campaignActionId,
               contactList: contacts,
             }),
           }
@@ -219,7 +250,7 @@ export const whatsappService = {
     params: SendIndividualParams
   ): Promise<SendMessageResult> {
     try {
-      const { phone, parameters } = params;
+      const { phone, parameters, hospitalId, campaignActionId } = params;
 
       // Validate phone number
       let cleanPhone = phone.replace(/\D/g, "");
@@ -238,18 +269,29 @@ export const whatsappService = {
 
       // Build contact object with parameters
       const contact: ColmeiaContact = {
-        celular: cleanPhone,
+        Celular: cleanPhone,
         ...parameters,
       };
+
+      // Build campaign config if hospital/campaign IDs are provided
+      const campaignConfig: CampaignConfig | undefined =
+        hospitalId && campaignActionId
+          ? {
+              socialNetworkId: getSocialNetworkId(hospitalId),
+              campaignActionId,
+            }
+          : undefined;
 
       console.log(
         "[Colmeia] Sending message to:",
         cleanPhone,
         "with params:",
-        contact
+        contact,
+        "config:",
+        campaignConfig
       );
 
-      const result = await sendCampaign([contact]);
+      const result = await sendCampaign([contact], campaignConfig);
 
       return result;
     } catch (error) {
@@ -271,7 +313,9 @@ export const whatsappService = {
     contacts: Array<{
       phone: string;
       [key: string]: string | undefined;
-    }>
+    }>,
+    hospitalId?: string,
+    campaignActionId?: string
   ): Promise<SendMessageResult> {
     try {
       // Transform contacts to Colmeia format
@@ -284,7 +328,7 @@ export const whatsappService = {
         }
 
         const colmeiaContact: ColmeiaContact = {
-          celular: cleanPhone,
+          Celular: cleanPhone,
         };
 
         // Copy all other parameters (excluding phone)
@@ -297,13 +341,24 @@ export const whatsappService = {
         return colmeiaContact;
       });
 
+      // Build campaign config if hospital/campaign IDs are provided
+      const campaignConfig: CampaignConfig | undefined =
+        hospitalId && campaignActionId
+          ? {
+              socialNetworkId: getSocialNetworkId(hospitalId),
+              campaignActionId,
+            }
+          : undefined;
+
       console.log(
         "[Colmeia] Sending bulk messages to",
         colmeiaContacts.length,
-        "contacts"
+        "contacts",
+        "config:",
+        campaignConfig
       );
 
-      const result = await sendCampaign(colmeiaContacts);
+      const result = await sendCampaign(colmeiaContacts, campaignConfig);
 
       if (result.success) {
         result.message = `${contacts.length} mensagens enviadas com sucesso`;
@@ -348,9 +403,16 @@ export const whatsappService = {
   /**
    * Force token refresh (useful for debugging)
    */
-  async refreshToken(): Promise<void> {
-    cachedAuthToken = null;
-    tokenExpiresAt = null;
-    await getAuthToken();
+  async refreshToken(hospitalId?: string): Promise<void> {
+    const socialNetworkId = getSocialNetworkId(hospitalId);
+    tokenCache.delete(socialNetworkId);
+    await getAuthToken(socialNetworkId);
+  },
+
+  /**
+   * Get the social network ID for a hospital
+   */
+  getSocialNetworkIdForHospital(hospitalId: string): string {
+    return getSocialNetworkId(hospitalId);
   },
 };

@@ -1,13 +1,20 @@
 import { useState, useEffect } from 'react';
-import { Send, Download, Upload, AlertCircle, X } from 'lucide-react';
+import { Send, Download, Upload, AlertCircle, X, AlertTriangle, Building2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { Template, CSVRow } from '../types';
+import { Template, CSVRow, HOSPITALS } from '../types';
 import { templateService } from '../services/templateService';
 import { whatsappService } from '../services/whatsappService';
 import { historyService } from '../services/historyService';
 import { parseCSV, downloadSampleCSV } from '../utils/csvParser';
 import { Button, Select, FileUpload, Table } from '../components/ui';
 import Layout from '../components/layout/Layout';
+
+// Helper function to get hospital name from ID
+const getHospitalName = (hospitalId?: string | null): string | null => {
+  if (!hospitalId) return null;
+  const hospital = HOSPITALS.find(h => h.id === hospitalId);
+  return hospital?.name || null;
+};
 
 export default function BulkSendingPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -87,20 +94,25 @@ export default function BulkSendingPage() {
       setSending(true);
       setSendProgress({ sent: 0, total: csvData.length });
 
-      // Send messages via WhatsApp API
+      // Send messages via WhatsApp API with template's hospital and campaign configuration
       for (let i = 0; i < csvData.length; i++) {
         const row = csvData[i];
+
+        // Build parameters object using the actual template parameter names (case-sensitive for Colmeia)
+        const parameters: Record<string, string> = {};
+        if (selectedTemplate.parameter_1 && row.param_1) parameters[selectedTemplate.parameter_1] = row.param_1;
+        if (selectedTemplate.parameter_2 && row.param_2) parameters[selectedTemplate.parameter_2] = row.param_2;
+        if (selectedTemplate.parameter_3 && row.param_3) parameters[selectedTemplate.parameter_3] = row.param_3;
+        if (selectedTemplate.parameter_4 && row.param_4) parameters[selectedTemplate.parameter_4] = row.param_4;
+        if (selectedTemplate.parameter_5 && row.param_5) parameters[selectedTemplate.parameter_5] = row.param_5;
+        if (selectedTemplate.parameter_6 && row.param_6) parameters[selectedTemplate.parameter_6] = row.param_6;
+
         await whatsappService.sendIndividual({
           phone: row.phone.replace(/\D/g, ''),
           templateId: selectedTemplateId,
-          parameters: {
-            param_1: row.param_1 || '',
-            param_2: row.param_2 || '',
-            param_3: row.param_3 || '',
-            param_4: row.param_4 || '',
-            param_5: row.param_5 || '',
-            param_6: row.param_6 || '',
-          },
+          parameters,
+          hospitalId: selectedTemplate.hospital_id || undefined,
+          campaignActionId: selectedTemplate.campaign_action_id || undefined,
         });
         setSendProgress({ sent: i + 1, total: csvData.length });
       }
@@ -143,6 +155,10 @@ export default function BulkSendingPage() {
     ...(selectedTemplate?.parameter_6 ? [{ key: 'param_6', header: selectedTemplate.parameter_6 }] : []),
   ];
 
+  // Check if template has proper Colmeia configuration
+  const hasColmeiaConfig = selectedTemplate?.hospital_id && selectedTemplate?.campaign_action_id;
+  const hospitalName = selectedTemplate ? getHospitalName(selectedTemplate.hospital_id) : null;
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -178,6 +194,33 @@ export default function BulkSendingPage() {
               </Button>
             </div>
           </div>
+
+          {/* Template configuration indicator */}
+          {selectedTemplate && (
+            hasColmeiaConfig ? (
+              <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <Building2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                <div className="flex-1">
+                  <span className="text-sm text-blue-800 dark:text-blue-300">
+                    Hospital: <strong>{hospitalName}</strong>
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                    Configuração incompleta
+                  </p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                    Este template não possui hospital/campanha configurados.
+                    Edite o template para definir essas configurações.
+                  </p>
+                </div>
+              </div>
+            )
+          )}
 
           {selectedTemplateId && (
             <FileUpload
