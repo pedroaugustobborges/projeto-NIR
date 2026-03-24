@@ -14,6 +14,7 @@ import {
   Phone,
   Eye,
   Filter,
+  Download,
 } from "lucide-react";
 import {
   format,
@@ -87,7 +88,14 @@ export default function HistoryPage() {
   // Reset to first page when filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedHospital, selectedTemplate, selectedType, startDate, endDate, itemsPerPage]);
+  }, [
+    selectedHospital,
+    selectedTemplate,
+    selectedType,
+    startDate,
+    endDate,
+    itemsPerPage,
+  ]);
 
   const loadData = async () => {
     try {
@@ -112,6 +120,118 @@ export default function HistoryPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Export filtered data to CSV
+  const handleExportCSV = () => {
+    if (filteredHistory.length === 0) {
+      toast.error("Nenhum dado para exportar");
+      return;
+    }
+
+    // Get hospital name from template
+    const getHospitalName = (templateId?: string): string => {
+      if (!templateId) return "";
+      const template = templates.find((t) => t.id === templateId);
+      if (!template?.hospital_id) return "";
+      const hospital = HOSPITALS.find((h) => h.id === template.hospital_id);
+      return hospital?.name || "";
+    };
+
+    // Build CSV rows - expand bulk sends into individual rows
+    const csvRows: string[][] = [];
+
+    // Header
+    csvRows.push([
+      "Data/Hora",
+      "Template",
+      "Tipo",
+      "Telefone",
+      "Status",
+      "Hospital",
+    ]);
+
+    // Data rows
+    filteredHistory.forEach((item) => {
+      const dateStr = new Date(item.created_at).toLocaleString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      const templateName = item.template_name || "";
+      const status = getStatusLabel(item.status);
+      const hospital = getHospitalName(item.template_id);
+
+      if (item.sending_type === "individual") {
+        // Individual send - one row
+        csvRows.push([
+          dateStr,
+          templateName,
+          "Individual",
+          formatPhone(item.phone || ""),
+          status,
+          hospital,
+        ]);
+      } else {
+        // Bulk send - expand to individual rows
+        const phones = parsePhoneList(item.phone_list);
+        if (phones.length > 0) {
+          phones.forEach((phone) => {
+            csvRows.push([
+              dateStr,
+              templateName,
+              "Em Massa",
+              formatPhone(phone),
+              status,
+              hospital,
+            ]);
+          });
+        } else {
+          // No phone list available, add single row with count
+          csvRows.push([
+            dateStr,
+            templateName,
+            "Em Massa",
+            `${item.total_sent || 0} mensagens`,
+            status,
+            hospital,
+          ]);
+        }
+      }
+    });
+
+    // Convert to CSV string
+    const csvContent = csvRows
+      .map((row) =>
+        row
+          .map((cell) => {
+            // Escape quotes and wrap in quotes if contains comma or quote
+            const escaped = cell.replace(/"/g, '""');
+            return `"${escaped}"`;
+          })
+          .join(","),
+      )
+      .join("\n");
+
+    // Add BOM for Excel UTF-8 compatibility
+    const bom = "\uFEFF";
+    const blob = new Blob([bom + csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    // Create download link
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `historico_${format(new Date(), "yyyy-MM-dd_HH-mm")}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast.success("CSV exportado com sucesso!");
   };
 
   const getStatusIcon = (status: SendingStatus) => {
@@ -149,17 +269,17 @@ export default function HistoryPage() {
 
   // Filter options
   const hospitalOptions = [
-    { value: "", label: "Todos os Hospitais" },
+    { value: "", label: "Todos" },
     ...HOSPITALS.map((h) => ({ value: h.id, label: h.name })),
   ];
 
   const templateOptions = [
-    { value: "", label: "Todos os Templates" },
+    { value: "", label: "Todos" },
     ...templates.map((t) => ({ value: t.id, label: t.name })),
   ];
 
   const typeOptions = [
-    { value: "", label: "Todos os Tipos" },
+    { value: "", label: "Todos" },
     { value: "individual", label: "Individual" },
     { value: "bulk", label: "Em Massa" },
   ];
@@ -196,7 +316,15 @@ export default function HistoryPage() {
 
       return true;
     });
-  }, [history, templates, selectedHospital, selectedTemplate, selectedType, startDate, endDate]);
+  }, [
+    history,
+    templates,
+    selectedHospital,
+    selectedTemplate,
+    selectedType,
+    startDate,
+    endDate,
+  ]);
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredHistory.length / itemsPerPage);
@@ -345,7 +473,8 @@ export default function HistoryPage() {
 
   const stats = {
     total: filteredHistory.length,
-    individual: filteredHistory.filter((h) => h.sending_type === "individual").length,
+    individual: filteredHistory.filter((h) => h.sending_type === "individual")
+      .length,
     bulk: filteredHistory.filter((h) => h.sending_type === "bulk").length,
     success: filteredHistory.filter((h) => h.status === "success").length,
     failed: filteredHistory.filter((h) => h.status === "failed").length,
@@ -364,10 +493,20 @@ export default function HistoryPage() {
               Visualize o histórico de mensagens enviadas
             </p>
           </div>
-          <Button variant="outline" onClick={loadData} disabled={loading}>
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-            Atualizar
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={handleExportCSV}
+              disabled={loading || filteredHistory.length === 0}
+            >
+              <Download className="w-4 h-4" />
+              Exportar CSV
+            </Button>
+            <Button variant="outline" onClick={loadData} disabled={loading}>
+              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+              Atualizar
+            </Button>
+          </div>
         </div>
 
         {/* Stats */}
