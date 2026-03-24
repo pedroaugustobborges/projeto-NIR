@@ -172,7 +172,14 @@ export default function DashboardPage() {
 
       return true;
     });
-  }, [data, selectedHospital, selectedTemplate, selectedType, startDate, endDate]);
+  }, [
+    data,
+    selectedHospital,
+    selectedTemplate,
+    selectedType,
+    startDate,
+    endDate,
+  ]);
 
   // Calculate metrics
   const metrics = useMemo(() => {
@@ -289,19 +296,19 @@ export default function DashboardPage() {
 
   // Hospital options for filter
   const hospitalOptions = [
-    { value: "", label: "Todos os Hospitais" },
+    { value: "", label: "Todos" },
     ...HOSPITALS.map((h) => ({ value: h.id, label: h.name })),
   ];
 
   // Template options for filter
   const templateOptions = [
-    { value: "", label: "Todos os Templates" },
+    { value: "", label: "Todos" },
     ...data.templates.map((t) => ({ value: t.id, label: t.name })),
   ];
 
   // Type options for filter
   const typeOptions = [
-    { value: "", label: "Todos os Tipos" },
+    { value: "", label: "Todos" },
     { value: "individual", label: "Individual" },
     { value: "bulk", label: "Em Massa" },
   ];
