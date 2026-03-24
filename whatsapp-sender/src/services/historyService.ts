@@ -13,6 +13,7 @@ interface CreateBulkParams {
   template_name: string;
   total_sent: number;
   description?: string;
+  phone_list?: string[]; // Array of phone numbers
 }
 
 export const historyService = {
@@ -69,6 +70,7 @@ export const historyService = {
         sending_type: 'bulk',
         status: 'success',
         total_sent: params.total_sent,
+        phone_list: params.phone_list ? JSON.stringify(params.phone_list) : null,
       })
       .select()
       .single();

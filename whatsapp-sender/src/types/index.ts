@@ -52,6 +52,7 @@ export interface SendingHistory {
   template_name: string;
   description?: string;
   phone?: string;
+  phone_list?: string; // JSON array of phone numbers for bulk sends
   sending_type: SendingType;
   status: SendingStatus;
   error_message?: string;

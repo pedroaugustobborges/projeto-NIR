@@ -117,12 +117,22 @@ export default function BulkSendingPage() {
         setSendProgress({ sent: i + 1, total: csvData.length });
       }
 
-      // Log bulk sending to history
+      // Log bulk sending to history with phone numbers
+      const phoneNumbers = csvData.map((row) => {
+        let phone = row.phone.replace(/\D/g, '');
+        // Add country code if not present
+        if (phone.length === 10 || phone.length === 11) {
+          phone = '55' + phone;
+        }
+        return phone;
+      });
+
       await historyService.createBulk({
         template_id: selectedTemplateId,
         template_name: selectedTemplate.name,
         total_sent: csvData.length,
         description: csvFile?.name || 'Disparo em massa',
+        phone_list: phoneNumbers,
       });
 
       toast.success(`${csvData.length} mensagens enviadas com sucesso!`);

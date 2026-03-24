@@ -10,6 +10,9 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  X,
+  Phone,
+  Eye,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { SendingHistory, SendingStatus, SendingType } from "../types";
@@ -23,10 +26,38 @@ export default function HistoryPage() {
   const [history, setHistory] = useState<SendingHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | SendingType>("all");
+  const [selectedItem, setSelectedItem] = useState<SendingHistory | null>(null);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  // Parse phone list from JSON string
+  const parsePhoneList = (phoneList?: string): string[] => {
+    if (!phoneList) return [];
+    try {
+      return JSON.parse(phoneList);
+    } catch {
+      return [];
+    }
+  };
+
+  // Format phone number for display
+  const formatPhone = (phone: string): string => {
+    // Remove country code if present for display
+    const cleanPhone = phone.replace(/\D/g, "");
+    if (cleanPhone.length === 13 && cleanPhone.startsWith("55")) {
+      const local = cleanPhone.slice(2);
+      return local.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3");
+    }
+    if (cleanPhone.length === 11) {
+      return cleanPhone.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3");
+    }
+    if (cleanPhone.length === 10) {
+      return cleanPhone.replace(/(\d{2})(\d{4})(\d{4})/, "($1) $2-$3");
+    }
+    return phone;
+  };
 
   useEffect(() => {
     loadHistory();
@@ -179,15 +210,29 @@ export default function HistoryPage() {
               </span>
             </span>
           ) : (
-            <span className="text-gray-600 dark:text-gray-400">
-              {item.total_sent} mensagens enviadas
-              {item.description && (
-                <span className="text-gray-400 dark:text-gray-500">
-                  {" "}
-                  - {item.description}
-                </span>
+            <div className="flex items-center gap-3">
+              <span className="text-gray-600 dark:text-gray-400">
+                {item.total_sent} mensagens enviadas
+                {item.description && (
+                  <span className="text-gray-400 dark:text-gray-500">
+                    {" "}
+                    - {item.description}
+                  </span>
+                )}
+              </span>
+              {item.phone_list && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedItem(item);
+                  }}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                >
+                  <Eye className="w-3 h-3" />
+                  Ver telefones
+                </button>
               )}
-            </span>
+            </div>
           )}
         </div>
       ),
@@ -334,7 +379,7 @@ export default function HistoryPage() {
               {/* Items per page selector */}
               <div className="flex items-center gap-3">
                 <span className="text-sm text-gray-600 dark:text-gray-400">
-                  Itens por pagina:
+                  Itens por página:
                 </span>
                 <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                   {ITEMS_PER_PAGE_OPTIONS.map((option) => (
@@ -444,6 +489,116 @@ export default function HistoryPage() {
           </div>
         )}
       </div>
+
+      {/* Phone List Modal */}
+      {selectedItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setSelectedItem(null)}
+          />
+
+          {/* Modal */}
+          <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Detalhes do Disparo
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {selectedItem.template_name}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedItem(null)}
+                className="p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Info Section */}
+            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Data/Hora
+                  </p>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white mt-1">
+                    {new Date(selectedItem.created_at).toLocaleString("pt-BR", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Total Enviado
+                  </p>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white mt-1">
+                    {selectedItem.total_sent} mensagens
+                  </p>
+                </div>
+                {selectedItem.description && (
+                  <div className="col-span-2">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Arquivo
+                    </p>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white mt-1">
+                      {selectedItem.description}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Phone List */}
+            <div className="px-6 py-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Phone className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Telefones ({parsePhoneList(selectedItem.phone_list).length})
+                </h4>
+              </div>
+              <div className="max-h-64 overflow-y-auto space-y-1 pr-2">
+                {parsePhoneList(selectedItem.phone_list).map((phone, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center gap-3 px-3 py-2 bg-gray-50 dark:bg-gray-900/50 rounded-lg"
+                  >
+                    <span className="text-xs text-gray-400 dark:text-gray-500 w-6">
+                      {index + 1}.
+                    </span>
+                    <span className="font-mono text-sm text-gray-700 dark:text-gray-300">
+                      {formatPhone(phone)}
+                    </span>
+                  </div>
+                ))}
+                {parsePhoneList(selectedItem.phone_list).length === 0 && (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+                    Lista de telefones não disponível
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+              <button
+                onClick={() => setSelectedItem(null)}
+                className="w-full px-4 py-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg font-medium hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }
