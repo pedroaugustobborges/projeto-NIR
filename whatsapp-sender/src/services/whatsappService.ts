@@ -33,6 +33,32 @@ interface SendIndividualParams {
 interface SendMessageResult {
   success: boolean;
   message: string;
+  errorType?: 'invalid_campaign' | 'parameter_mismatch' | 'missing_parameter' | 'api_error' | 'network_error';
+  errorDetails?: {
+    expectedParams?: string[];
+    receivedParams?: string[];
+    description?: string;
+  };
+}
+
+interface ColmeiaErrorResponse {
+  type: string;
+  status: number;
+  error?: {
+    id: string;
+    descriptions: Array<{ msg: string }>;
+  };
+}
+
+interface ColmeiaSuccessResponse {
+  contactsWithErrors?: Array<{
+    errorDescription: string;
+    contact: Record<string, string>;
+    values: string[];
+    metadata: string[];
+    isEmptyRowOrInvalidFields: boolean;
+  }>;
+  contactsSentSuccessLength: number;
 }
 
 interface ColmeiaTokenResponse {
@@ -144,6 +170,113 @@ interface CampaignConfig {
 }
 
 /**
+ * Parse Colmeia API response and extract error details
+ */
+function parseColmeiaResponse(
+  status: number,
+  responseText: string
+): SendMessageResult {
+  try {
+    const data = JSON.parse(responseText);
+
+    // Check for 400 Bad Request - Invalid campaign ID
+    if (status === 400 && data.type === "error") {
+      const errorData = data as ColmeiaErrorResponse;
+      const errorId = errorData.error?.id || "";
+      const errorMsg = errorData.error?.descriptions?.[0]?.msg || "Erro desconhecido";
+
+      if (errorId === "idCampaignActionMissingOrInvalid") {
+        return {
+          success: false,
+          message: "ID da Campanha inválido ou não encontrado. Verifique a configuração do template.",
+          errorType: "invalid_campaign",
+          errorDetails: {
+            description: errorMsg,
+          },
+        };
+      }
+
+      return {
+        success: false,
+        message: `Erro da API: ${errorMsg}`,
+        errorType: "api_error",
+        errorDetails: {
+          description: errorMsg,
+        },
+      };
+    }
+
+    // Check for 201 Created but with contactsWithErrors
+    if (status === 201 || status === 200) {
+      const successData = data as ColmeiaSuccessResponse;
+
+      if (successData.contactsWithErrors && successData.contactsWithErrors.length > 0) {
+        const firstError = successData.contactsWithErrors[0];
+        const expectedParams = firstError.metadata || [];
+        const receivedParams = Object.keys(firstError.contact || {});
+
+        // Determine error type
+        let errorType: SendMessageResult["errorType"] = "parameter_mismatch";
+        let message = "Erro nos parâmetros do template.";
+
+        if (firstError.isEmptyRowOrInvalidFields) {
+          // Check if it's a missing parameter or mismatch
+          const missingParams = expectedParams.filter(
+            (p) => !receivedParams.map((r) => r.toLowerCase()).includes(p.toLowerCase())
+          );
+
+          if (missingParams.length > 0) {
+            errorType = "missing_parameter";
+            message = `Parâmetro(s) faltando: ${missingParams.join(", ")}. Esperado: ${expectedParams.join(", ")}.`;
+          } else {
+            message = `Os nomes dos parâmetros não correspondem ao template. Esperado: ${expectedParams.join(", ")}. Recebido: ${receivedParams.join(", ")}.`;
+          }
+        }
+
+        return {
+          success: false,
+          message,
+          errorType,
+          errorDetails: {
+            expectedParams,
+            receivedParams,
+            description: firstError.errorDescription,
+          },
+        };
+      }
+
+      // Check if any messages were sent successfully
+      if (successData.contactsSentSuccessLength === 0) {
+        return {
+          success: false,
+          message: "Nenhuma mensagem foi enviada. Verifique os dados.",
+          errorType: "api_error",
+        };
+      }
+
+      return {
+        success: true,
+        message: "Mensagem enviada com sucesso via WhatsApp",
+      };
+    }
+
+    // Generic error for other status codes
+    return {
+      success: false,
+      message: `Erro da API Colmeia: ${status} - ${responseText}`,
+      errorType: "api_error",
+    };
+  } catch {
+    // JSON parsing failed
+    return {
+      success: false,
+      message: `Erro da API Colmeia: ${status} - ${responseText}`,
+      errorType: "api_error",
+    };
+  }
+}
+
+/**
  * Send campaign via Colmeia API
  */
 async function sendCampaign(
@@ -157,6 +290,23 @@ async function sendCampaign(
   console.log("[Colmeia] Using socialNetworkId:", socialNetworkId);
   console.log("[Colmeia] Using campaignActionId:", campaignActionId);
   console.log("[Colmeia] Contact list:", JSON.stringify(contacts, null, 2));
+
+  // Validate configuration
+  if (!socialNetworkId) {
+    return {
+      success: false,
+      message: "Hospital não configurado no template. Edite o template e selecione um hospital.",
+      errorType: "invalid_campaign",
+    };
+  }
+
+  if (!campaignActionId) {
+    return {
+      success: false,
+      message: "ID da Campanha não configurado no template. Edite o template e adicione o ID da campanha.",
+      errorType: "invalid_campaign",
+    };
+  }
 
   try {
     const authToken = await getAuthToken(socialNetworkId);
@@ -181,55 +331,35 @@ async function sendCampaign(
     const responseText = await response.text();
     console.log("[Colmeia] Response:", response.status, responseText);
 
-    if (!response.ok) {
-      // If unauthorized, try to refresh token and retry once
-      if (response.status === 401) {
-        console.log("[Colmeia] Token expired, refreshing...");
-        tokenCache.delete(socialNetworkId);
+    // If unauthorized, try to refresh token and retry once
+    if (response.status === 401) {
+      console.log("[Colmeia] Token expired, refreshing...");
+      tokenCache.delete(socialNetworkId);
 
-        const newToken = await getAuthToken(socialNetworkId);
-        const retryResponse = await fetch(
-          `${COLMEIA_CONFIG.baseUrl}/marketing-send-campaign`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: newToken,
-              idSocialNetwork: socialNetworkId,
-            },
-            body: JSON.stringify({
-              idCampaignAction: campaignActionId,
-              contactList: contacts,
-            }),
-          }
-        );
-
-        const retryText = await retryResponse.text();
-        console.log("[Colmeia] Retry response:", retryResponse.status, retryText);
-
-        if (!retryResponse.ok) {
-          return {
-            success: false,
-            message: `Erro da API Colmeia: ${retryResponse.status} - ${retryText}`,
-          };
+      const newToken = await getAuthToken(socialNetworkId);
+      const retryResponse = await fetch(
+        `${COLMEIA_CONFIG.baseUrl}/marketing-send-campaign`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: newToken,
+            idSocialNetwork: socialNetworkId,
+          },
+          body: JSON.stringify({
+            idCampaignAction: campaignActionId,
+            contactList: contacts,
+          }),
         }
+      );
 
-        return {
-          success: true,
-          message: "Mensagem enviada com sucesso via WhatsApp",
-        };
-      }
+      const retryText = await retryResponse.text();
+      console.log("[Colmeia] Retry response:", retryResponse.status, retryText);
 
-      return {
-        success: false,
-        message: `Erro da API Colmeia: ${response.status} - ${responseText}`,
-      };
+      return parseColmeiaResponse(retryResponse.status, retryText);
     }
 
-    return {
-      success: true,
-      message: "Mensagem enviada com sucesso via WhatsApp",
-    };
+    return parseColmeiaResponse(response.status, responseText);
   } catch (error) {
     console.error("[Colmeia] Error in sendCampaign:", error);
     return {
@@ -237,7 +367,8 @@ async function sendCampaign(
       message:
         error instanceof Error
           ? error.message
-          : "Erro desconhecido ao enviar campanha",
+          : "Erro de conexão ao enviar mensagem",
+      errorType: "network_error",
     };
   }
 }

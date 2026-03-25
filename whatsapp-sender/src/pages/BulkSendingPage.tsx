@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Send, Download, Upload, AlertCircle, X, AlertTriangle, Building2 } from 'lucide-react';
+import { Send, Download, Upload, AlertCircle, X, AlertTriangle, Building2, XCircle, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Template, CSVRow, HOSPITALS } from '../types';
 import { templateService } from '../services/templateService';
@@ -8,6 +8,18 @@ import { historyService } from '../services/historyService';
 import { parseCSV, downloadSampleCSV } from '../utils/csvParser';
 import { Button, Select, FileUpload, Table } from '../components/ui';
 import Layout from '../components/layout/Layout';
+
+interface SendResult {
+  success: number;
+  failed: number;
+  errors: Array<{
+    phone: string;
+    message: string;
+    errorType?: string;
+    expectedParams?: string[];
+    receivedParams?: string[];
+  }>;
+}
 
 // Helper function to get hospital name from ID
 const getHospitalName = (hospitalId?: string | null): string | null => {
@@ -26,6 +38,7 @@ export default function BulkSendingPage() {
   const [templatesLoading, setTemplatesLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [sendProgress, setSendProgress] = useState({ sent: 0, total: 0 });
+  const [sendResult, setSendResult] = useState<SendResult | null>(null);
 
   useEffect(() => {
     loadTemplates();
@@ -51,6 +64,7 @@ export default function BulkSendingPage() {
     setCsvFile(null);
     setCsvData([]);
     setCsvErrors([]);
+    setSendResult(null);
   };
 
   const handleFileChange = async (file: File | null) => {
@@ -93,10 +107,20 @@ export default function BulkSendingPage() {
     try {
       setSending(true);
       setSendProgress({ sent: 0, total: csvData.length });
+      setSendResult(null);
+
+      const result: SendResult = {
+        success: 0,
+        failed: 0,
+        errors: [],
+      };
+
+      const successfulPhones: string[] = [];
 
       // Send messages via WhatsApp API with template's hospital and campaign configuration
       for (let i = 0; i < csvData.length; i++) {
         const row = csvData[i];
+        const phoneDigits = row.phone.replace(/\D/g, '');
 
         // Build parameters object using the actual template parameter names (case-sensitive for Colmeia)
         const parameters: Record<string, string> = {};
@@ -107,43 +131,73 @@ export default function BulkSendingPage() {
         if (selectedTemplate.parameter_5 && row.param_5) parameters[selectedTemplate.parameter_5] = row.param_5;
         if (selectedTemplate.parameter_6 && row.param_6) parameters[selectedTemplate.parameter_6] = row.param_6;
 
-        await whatsappService.sendIndividual({
-          phone: row.phone.replace(/\D/g, ''),
+        const sendResponse = await whatsappService.sendIndividual({
+          phone: phoneDigits,
           templateId: selectedTemplateId,
           parameters,
           hospitalId: selectedTemplate.hospital_id || undefined,
           campaignActionId: selectedTemplate.campaign_action_id || undefined,
         });
+
+        if (sendResponse.success) {
+          result.success++;
+          let phone = phoneDigits;
+          if (phone.length === 10 || phone.length === 11) {
+            phone = '55' + phone;
+          }
+          successfulPhones.push(phone);
+        } else {
+          result.failed++;
+          result.errors.push({
+            phone: row.phone,
+            message: sendResponse.message,
+            errorType: sendResponse.errorType,
+            expectedParams: sendResponse.errorDetails?.expectedParams,
+            receivedParams: sendResponse.errorDetails?.receivedParams,
+          });
+
+          // If it's a configuration error, stop sending (all will fail)
+          if (sendResponse.errorType === 'invalid_campaign' || sendResponse.errorType === 'parameter_mismatch' || sendResponse.errorType === 'missing_parameter') {
+            // Mark remaining as failed with same error
+            for (let j = i + 1; j < csvData.length; j++) {
+              result.failed++;
+            }
+            break;
+          }
+        }
+
         setSendProgress({ sent: i + 1, total: csvData.length });
       }
 
-      // Log bulk sending to history with phone numbers
-      const phoneNumbers = csvData.map((row) => {
-        let phone = row.phone.replace(/\D/g, '');
-        // Add country code if not present
-        if (phone.length === 10 || phone.length === 11) {
-          phone = '55' + phone;
-        }
-        return phone;
-      });
+      setSendResult(result);
 
-      await historyService.createBulk({
-        template_id: selectedTemplateId,
-        template_name: selectedTemplate.name,
-        total_sent: csvData.length,
-        description: csvFile?.name || 'Disparo em massa',
-        phone_list: phoneNumbers,
-      });
+      // Log bulk sending to history only if there were successes
+      if (result.success > 0) {
+        await historyService.createBulk({
+          template_id: selectedTemplateId,
+          template_name: selectedTemplate.name,
+          total_sent: result.success,
+          description: csvFile?.name || 'Disparo em massa',
+          phone_list: successfulPhones,
+        });
+      }
 
-      toast.success(`${csvData.length} mensagens enviadas com sucesso!`);
-
-      // Reset form
-      setCsvFile(null);
-      setCsvData([]);
-      setCsvErrors([]);
+      // Show appropriate message
+      if (result.failed === 0) {
+        toast.success(`${result.success} mensagens enviadas com sucesso!`);
+        // Reset form only on complete success
+        setCsvFile(null);
+        setCsvData([]);
+        setCsvErrors([]);
+      } else if (result.success === 0) {
+        toast.error(`Falha ao enviar todas as ${result.failed} mensagens`);
+      } else {
+        toast.error(`${result.success} enviadas, ${result.failed} falharam`);
+      }
     } catch (error) {
       console.error('Erro ao enviar mensagens:', error);
-      toast.error('Erro ao enviar mensagens');
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao enviar mensagens';
+      toast.error(errorMessage);
     } finally {
       setSending(false);
       setSendProgress({ sent: 0, total: 0 });
@@ -325,6 +379,106 @@ export default function BulkSendingPage() {
                   }}
                 />
               </div>
+            </div>
+          )}
+
+          {/* Send Results */}
+          {sendResult && !sending && (
+            <div className="space-y-4">
+              {/* Summary */}
+              <div className={`p-4 rounded-lg border ${
+                sendResult.failed === 0
+                  ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                  : sendResult.success === 0
+                    ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                    : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+              }`}>
+                <div className="flex items-center gap-4">
+                  {sendResult.failed === 0 ? (
+                    <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
+                  ) : (
+                    <XCircle className="w-8 h-8 text-red-600 dark:text-red-400" />
+                  )}
+                  <div className="flex-1">
+                    <p className={`font-semibold ${
+                      sendResult.failed === 0
+                        ? 'text-green-800 dark:text-green-300'
+                        : 'text-red-800 dark:text-red-300'
+                    }`}>
+                      {sendResult.failed === 0
+                        ? 'Todas as mensagens enviadas com sucesso!'
+                        : sendResult.success === 0
+                          ? 'Falha ao enviar mensagens'
+                          : 'Envio parcialmente concluído'}
+                    </p>
+                    <div className="flex gap-4 mt-1 text-sm">
+                      <span className="text-green-700 dark:text-green-400">
+                        {sendResult.success} enviadas
+                      </span>
+                      {sendResult.failed > 0 && (
+                        <span className="text-red-700 dark:text-red-400">
+                          {sendResult.failed} falharam
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setSendResult(null)}
+                    className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Error Details */}
+              {sendResult.errors.length > 0 && (
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 space-y-3">
+                      <h4 className="font-medium text-red-800 dark:text-red-300">
+                        Detalhes dos erros
+                      </h4>
+
+                      {/* First error details */}
+                      <div className="text-sm text-red-700 dark:text-red-400 space-y-2">
+                        <p><strong>Motivo:</strong> {sendResult.errors[0].message}</p>
+                        {sendResult.errors[0].expectedParams && sendResult.errors[0].expectedParams.length > 0 && (
+                          <div className="pt-2 border-t border-red-200 dark:border-red-700 space-y-1">
+                            <p>
+                              <strong>Parâmetros esperados pelo template:</strong>{' '}
+                              {sendResult.errors[0].expectedParams.join(', ')}
+                            </p>
+                            {sendResult.errors[0].receivedParams && (
+                              <p>
+                                <strong>Parâmetros enviados:</strong>{' '}
+                                {sendResult.errors[0].receivedParams.join(', ')}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Failed phones list */}
+                      {sendResult.errors.length > 1 && (
+                        <details className="text-sm">
+                          <summary className="cursor-pointer text-red-700 dark:text-red-400 font-medium">
+                            Ver todos os {sendResult.errors.length} telefones com erro
+                          </summary>
+                          <ul className="mt-2 space-y-1 max-h-32 overflow-y-auto">
+                            {sendResult.errors.map((error, index) => (
+                              <li key={index} className="text-red-600 dark:text-red-400 font-mono text-xs">
+                                {error.phone}
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

@@ -1,28 +1,43 @@
-import { useState, useEffect } from 'react';
-import { Send, CheckCircle2, AlertTriangle, Building2 } from 'lucide-react';
-import toast from 'react-hot-toast';
-import { Template, HOSPITALS } from '../types';
-import { templateService } from '../services/templateService';
-import { whatsappService } from '../services/whatsappService';
-import { historyService } from '../services/historyService';
-import { Button, Input, Select } from '../components/ui';
-import Layout from '../components/layout/Layout';
+import { useState, useEffect } from "react";
+import {
+  Send,
+  CheckCircle2,
+  AlertTriangle,
+  Building2,
+  XCircle,
+  AlertOctagon,
+} from "lucide-react";
+import toast from "react-hot-toast";
+import { Template, HOSPITALS } from "../types";
+import { templateService } from "../services/templateService";
+import { whatsappService } from "../services/whatsappService";
+import { historyService } from "../services/historyService";
+import { Button, Input, Select } from "../components/ui";
+import Layout from "../components/layout/Layout";
+
+interface SendError {
+  message: string;
+  errorType?: string;
+  expectedParams?: string[];
+  receivedParams?: string[];
+}
 
 // Helper function to get hospital name from ID
 const getHospitalName = (hospitalId?: string | null): string | null => {
   if (!hospitalId) return null;
-  const hospital = HOSPITALS.find(h => h.id === hospitalId);
+  const hospital = HOSPITALS.find((h) => h.id === hospitalId);
   return hospital?.name || null;
 };
 
 export default function IndividualSendingPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState('');
-  const [phone, setPhone] = useState('');
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [phone, setPhone] = useState("");
   const [parameters, setParameters] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [templatesLoading, setTemplatesLoading] = useState(true);
   const [success, setSuccess] = useState(false);
+  const [sendError, setSendError] = useState<SendError | null>(null);
 
   useEffect(() => {
     loadTemplates();
@@ -34,8 +49,8 @@ export default function IndividualSendingPage() {
       const data = await templateService.getAll();
       setTemplates(data);
     } catch (error) {
-      console.error('Erro ao carregar templates:', error);
-      toast.error('Erro ao carregar templates');
+      console.error("Erro ao carregar templates:", error);
+      toast.error("Erro ao carregar templates");
     } finally {
       setTemplatesLoading(false);
     }
@@ -43,15 +58,23 @@ export default function IndividualSendingPage() {
 
   const selectedTemplate = templates.find((t) => t.id === selectedTemplateId);
 
-  const getTemplateParameters = (template: Template): { key: string; label: string }[] => {
+  const getTemplateParameters = (
+    template: Template,
+  ): { key: string; label: string }[] => {
     const params: { key: string; label: string }[] = [];
     // Use the exact parameter name as the key for Colmeia API (case-sensitive)
-    if (template.parameter_1) params.push({ key: template.parameter_1, label: template.parameter_1 });
-    if (template.parameter_2) params.push({ key: template.parameter_2, label: template.parameter_2 });
-    if (template.parameter_3) params.push({ key: template.parameter_3, label: template.parameter_3 });
-    if (template.parameter_4) params.push({ key: template.parameter_4, label: template.parameter_4 });
-    if (template.parameter_5) params.push({ key: template.parameter_5, label: template.parameter_5 });
-    if (template.parameter_6) params.push({ key: template.parameter_6, label: template.parameter_6 });
+    if (template.parameter_1)
+      params.push({ key: template.parameter_1, label: template.parameter_1 });
+    if (template.parameter_2)
+      params.push({ key: template.parameter_2, label: template.parameter_2 });
+    if (template.parameter_3)
+      params.push({ key: template.parameter_3, label: template.parameter_3 });
+    if (template.parameter_4)
+      params.push({ key: template.parameter_4, label: template.parameter_4 });
+    if (template.parameter_5)
+      params.push({ key: template.parameter_5, label: template.parameter_5 });
+    if (template.parameter_6)
+      params.push({ key: template.parameter_6, label: template.parameter_6 });
     return params;
   };
 
@@ -59,6 +82,7 @@ export default function IndividualSendingPage() {
     setSelectedTemplateId(templateId);
     setParameters({});
     setSuccess(false);
+    setSendError(null);
   };
 
   const handleParameterChange = (key: string, value: string) => {
@@ -67,7 +91,7 @@ export default function IndividualSendingPage() {
 
   const formatPhone = (value: string): string => {
     // Remove non-digits
-    const digits = value.replace(/\D/g, '');
+    const digits = value.replace(/\D/g, "");
 
     // Format as Brazilian phone
     if (digits.length <= 2) return digits;
@@ -86,13 +110,13 @@ export default function IndividualSendingPage() {
 
   const validateForm = (): boolean => {
     if (!selectedTemplateId) {
-      toast.error('Selecione um template');
+      toast.error("Selecione um template");
       return false;
     }
 
-    const phoneDigits = phone.replace(/\D/g, '');
+    const phoneDigits = phone.replace(/\D/g, "");
     if (phoneDigits.length < 10 || phoneDigits.length > 11) {
-      toast.error('Telefone inválido. Use o formato (XX) XXXXX-XXXX');
+      toast.error("Telefone inválido. Use o formato (XX) XXXXX-XXXX");
       return false;
     }
 
@@ -107,11 +131,12 @@ export default function IndividualSendingPage() {
     try {
       setLoading(true);
       setSuccess(false);
+      setSendError(null);
 
-      const phoneDigits = phone.replace(/\D/g, '');
+      const phoneDigits = phone.replace(/\D/g, "");
 
       // Send message via WhatsApp API with template's hospital and campaign configuration
-      await whatsappService.sendIndividual({
+      const result = await whatsappService.sendIndividual({
         phone: phoneDigits,
         templateId: selectedTemplateId,
         parameters,
@@ -119,7 +144,19 @@ export default function IndividualSendingPage() {
         campaignActionId: selectedTemplate.campaign_action_id || undefined,
       });
 
-      // Log to history
+      if (!result.success) {
+        // Show error to user
+        setSendError({
+          message: result.message,
+          errorType: result.errorType,
+          expectedParams: result.errorDetails?.expectedParams,
+          receivedParams: result.errorDetails?.receivedParams,
+        });
+        toast.error(result.message);
+        return;
+      }
+
+      // Log to history only on success
       await historyService.createIndividual({
         template_id: selectedTemplateId,
         template_name: selectedTemplate.name,
@@ -128,14 +165,17 @@ export default function IndividualSendingPage() {
       });
 
       setSuccess(true);
-      toast.success('Mensagem enviada com sucesso!');
+      toast.success("Mensagem enviada com sucesso!");
 
       // Reset form after success
-      setPhone('');
+      setPhone("");
       setParameters({});
     } catch (error) {
-      console.error('Erro ao enviar mensagem:', error);
-      toast.error('Erro ao enviar mensagem');
+      console.error("Erro ao enviar mensagem:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Erro ao enviar mensagem";
+      setSendError({ message: errorMessage });
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -146,18 +186,25 @@ export default function IndividualSendingPage() {
     label: t.name,
   }));
 
-  const templateParams = selectedTemplate ? getTemplateParameters(selectedTemplate) : [];
+  const templateParams = selectedTemplate
+    ? getTemplateParameters(selectedTemplate)
+    : [];
 
   // Check if template has proper Colmeia configuration
-  const hasColmeiaConfig = selectedTemplate?.hospital_id && selectedTemplate?.campaign_action_id;
-  const hospitalName = selectedTemplate ? getHospitalName(selectedTemplate.hospital_id) : null;
+  const hasColmeiaConfig =
+    selectedTemplate?.hospital_id && selectedTemplate?.campaign_action_id;
+  const hospitalName = selectedTemplate
+    ? getHospitalName(selectedTemplate.hospital_id)
+    : null;
 
   return (
     <Layout>
       <div className="max-w-2xl mx-auto space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Disparo Individual</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Disparo Individual
+          </h1>
           <p className="text-gray-500 dark:text-gray-400 mt-1">
             Envie mensagens para um único contato
           </p>
@@ -171,14 +218,16 @@ export default function IndividualSendingPage() {
               options={templateOptions}
               value={selectedTemplateId}
               onChange={(e) => handleTemplateChange(e.target.value)}
-              placeholder={templatesLoading ? 'Carregando...' : 'Selecione um template'}
+              placeholder={
+                templatesLoading ? "Carregando..." : "Selecione um template"
+              }
               disabled={templatesLoading || loading}
               required
             />
 
             {/* Template configuration indicator */}
-            {selectedTemplate && (
-              hasColmeiaConfig ? (
+            {selectedTemplate &&
+              (hasColmeiaConfig ? (
                 <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                   <Building2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                   <div className="flex-1">
@@ -200,11 +249,10 @@ export default function IndividualSendingPage() {
                     </p>
                   </div>
                 </div>
-              )
-            )}
+              ))}
 
             <Input
-              label="Telefone"
+              label="Celular"
               value={phone}
               onChange={handlePhoneChange}
               placeholder="(XX) XXXXX-XXXX"
@@ -222,8 +270,10 @@ export default function IndividualSendingPage() {
                     <Input
                       key={param.key}
                       label={param.label}
-                      value={parameters[param.key] || ''}
-                      onChange={(e) => handleParameterChange(param.key, e.target.value)}
+                      value={parameters[param.key] || ""}
+                      onChange={(e) =>
+                        handleParameterChange(param.key, e.target.value)
+                      }
                       placeholder={`Digite o ${param.label.toLowerCase()}`}
                       disabled={loading}
                     />
@@ -245,11 +295,49 @@ export default function IndividualSendingPage() {
               </div>
             )}
 
+            {/* Error Display */}
+            {sendError && (
+              <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                <div className="flex items-start gap-3">
+                  {sendError.errorType === "invalid_campaign" ? (
+                    <AlertOctagon className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                  ) : (
+                    <XCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                  )}
+                  <div className="flex-1 space-y-2">
+                    <p className="font-medium text-red-800 dark:text-red-300">
+                      Falha ao enviar mensagem
+                    </p>
+                    <p className="text-sm text-red-700 dark:text-red-400">
+                      {sendError.message}
+                    </p>
+                    {sendError.expectedParams &&
+                      sendError.expectedParams.length > 0 && (
+                        <div className="text-xs text-red-600 dark:text-red-400 space-y-1 pt-2 border-t border-red-200 dark:border-red-700">
+                          <p>
+                            <strong>Parâmetros esperados:</strong>{" "}
+                            {sendError.expectedParams.join(", ")}
+                          </p>
+                          {sendError.receivedParams && (
+                            <p>
+                              <strong>Parâmetros enviados:</strong>{" "}
+                              {sendError.receivedParams.join(", ")}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
               {success && (
                 <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
                   <CheckCircle2 className="w-5 h-5" />
-                  <span className="text-sm font-medium">Enviado com sucesso!</span>
+                  <span className="text-sm font-medium">
+                    Enviado com sucesso!
+                  </span>
                 </div>
               )}
               <div className="flex-1" />
