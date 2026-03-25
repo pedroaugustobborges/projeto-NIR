@@ -3,13 +3,34 @@ export interface HospitalConfig {
   id: string;
   name: string;
   socialNetworkId: string;
+  tokenId: string; // Each hospital needs its own token ID for authentication
 }
 
 export const HOSPITALS: HospitalConfig[] = [
-  { id: 'hecad', name: 'HECAD', socialNetworkId: 'oFzvyMeL6e8ALfPc4DPQlCNTwWhuU9' },
-  { id: 'crer', name: 'CRER', socialNetworkId: 'K36LwFWX0tIrMjmRm643PqLSziJ9pU' },
-  { id: 'hds', name: 'HDS', socialNetworkId: 'SHieySEXmlspZdFQ31Dd7bEuqkSUHr' },
-  { id: 'hugol', name: 'HUGOL', socialNetworkId: 'riOMRFeqi2QEwz3QT0PVQEK8YbtTle' },
+  {
+    id: "hecad",
+    name: "HECAD",
+    socialNetworkId: "oFzvyMeL6e8ALfPc4DPQlCNTwWhuU9",
+    tokenId: import.meta.env.VITE_COLMEIA_TOKEN_ID || "",
+  },
+  {
+    id: "crer",
+    name: "CRER",
+    socialNetworkId: "K36LwFWX0tIrMjmRm643PqLSziJ9pU",
+    tokenId: "HuHSUEXA6s24wtzkuniHFjVgJNrLAaZa",
+  },
+  {
+    id: "hds",
+    name: "HDS",
+    socialNetworkId: "SHieySEXmlspZdFQ31Dd7bEuqkSUHr",
+    tokenId: "TcGDVi4oLY3PkCZEK80XM2FUTsdmzQUZ",
+  },
+  {
+    id: "hugol",
+    name: "HUGOL",
+    socialNetworkId: "riOMRFeqi2QEwz3QT0PVQEK8YbtTle",
+    tokenId: "Y55ws6KLk9IAPxNR2vBfyXvEni4S8aVl",
+  },
 ];
 
 // Template Types
@@ -43,8 +64,8 @@ export interface TemplateFormData {
 }
 
 // Sending History Types
-export type SendingStatus = 'success' | 'failed' | 'pending';
-export type SendingType = 'individual' | 'bulk';
+export type SendingStatus = "success" | "failed" | "pending";
+export type SendingType = "individual" | "bulk";
 
 export interface SendingHistory {
   id: string;

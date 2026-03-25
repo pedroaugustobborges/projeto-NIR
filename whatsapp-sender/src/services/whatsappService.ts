@@ -82,24 +82,44 @@ async function hashPassword(password: string): Promise<string> {
 }
 
 /**
- * Get the social network ID for a hospital
+ * Get hospital configuration
  */
-function getSocialNetworkId(hospitalId?: string): string {
+function getHospitalConfig(hospitalId?: string): { socialNetworkId: string; tokenId: string } {
   if (!hospitalId) {
-    return COLMEIA_CONFIG.socialNetworkId;
+    return {
+      socialNetworkId: COLMEIA_CONFIG.socialNetworkId,
+      tokenId: COLMEIA_CONFIG.tokenId,
+    };
   }
 
   const hospital = HOSPITALS.find(h => h.id === hospitalId);
-  return hospital?.socialNetworkId || COLMEIA_CONFIG.socialNetworkId;
+  if (hospital) {
+    return {
+      socialNetworkId: hospital.socialNetworkId,
+      tokenId: hospital.tokenId || COLMEIA_CONFIG.tokenId,
+    };
+  }
+
+  return {
+    socialNetworkId: COLMEIA_CONFIG.socialNetworkId,
+    tokenId: COLMEIA_CONFIG.tokenId,
+  };
+}
+
+/**
+ * Get the social network ID for a hospital
+ */
+function getSocialNetworkId(hospitalId?: string): string {
+  return getHospitalConfig(hospitalId).socialNetworkId;
 }
 
 /**
  * Generate authentication token from Colmeia API
  */
-async function generateToken(socialNetworkId: string): Promise<string> {
+async function generateToken(socialNetworkId: string, tokenId: string): Promise<string> {
   console.log("[Colmeia] Generating new authentication token for socialNetworkId:", socialNetworkId);
 
-  if (!COLMEIA_CONFIG.tokenId || !COLMEIA_CONFIG.email || !COLMEIA_CONFIG.password) {
+  if (!tokenId || !COLMEIA_CONFIG.email || !COLMEIA_CONFIG.password) {
     throw new Error(
       "Credenciais da Colmeia não configuradas. Verifique as variáveis de ambiente."
     );
@@ -114,7 +134,7 @@ async function generateToken(socialNetworkId: string): Promise<string> {
       idSocialNetwork: socialNetworkId,
     },
     body: JSON.stringify({
-      idTokenToRefresh: COLMEIA_CONFIG.tokenId,
+      idTokenToRefresh: tokenId,
       email: COLMEIA_CONFIG.email,
       password: hashedPassword,
     }),
@@ -124,6 +144,14 @@ async function generateToken(socialNetworkId: string): Promise<string> {
   console.log("[Colmeia] Token generation response:", response.status, responseText);
 
   if (!response.ok) {
+    // Provide more helpful error message for 401
+    if (response.status === 401) {
+      const hospital = HOSPITALS.find(h => h.socialNetworkId === socialNetworkId);
+      const hospitalName = hospital?.name || 'desconhecido';
+      throw new Error(
+        `Falha na autenticação para ${hospitalName}. Verifique se o Token ID está configurado corretamente (VITE_COLMEIA_TOKEN_ID_${hospitalName}).`
+      );
+    }
     throw new Error(`Falha na autenticação: ${response.status} - ${responseText}`);
   }
 
@@ -146,7 +174,7 @@ async function generateToken(socialNetworkId: string): Promise<string> {
 /**
  * Get valid authentication token (generates new one if expired)
  */
-async function getAuthToken(socialNetworkId: string): Promise<string> {
+async function getAuthToken(socialNetworkId: string, tokenId: string): Promise<string> {
   // Check if we have a valid cached token for this socialNetworkId
   const cached = tokenCache.get(socialNetworkId);
   if (cached && Date.now() < cached.expiresAt) {
@@ -154,7 +182,7 @@ async function getAuthToken(socialNetworkId: string): Promise<string> {
   }
 
   // Generate new token
-  return generateToken(socialNetworkId);
+  return generateToken(socialNetworkId, tokenId);
 }
 
 // Contact type for Colmeia API
@@ -167,6 +195,7 @@ interface ColmeiaContact {
 interface CampaignConfig {
   socialNetworkId: string;
   campaignActionId: string;
+  tokenId: string;
 }
 
 /**
@@ -285,6 +314,7 @@ async function sendCampaign(
 ): Promise<SendMessageResult> {
   const socialNetworkId = config?.socialNetworkId || COLMEIA_CONFIG.socialNetworkId;
   const campaignActionId = config?.campaignActionId || COLMEIA_CONFIG.idCampaignAction;
+  const tokenId = config?.tokenId || COLMEIA_CONFIG.tokenId;
 
   console.log("[Colmeia] Sending campaign to", contacts.length, "contacts");
   console.log("[Colmeia] Using socialNetworkId:", socialNetworkId);
@@ -308,8 +338,18 @@ async function sendCampaign(
     };
   }
 
+  if (!tokenId) {
+    const hospital = HOSPITALS.find(h => h.socialNetworkId === socialNetworkId);
+    const hospitalName = hospital?.name || 'este hospital';
+    return {
+      success: false,
+      message: `Token ID não configurado para ${hospitalName}. Adicione VITE_COLMEIA_TOKEN_ID_${hospital?.name || 'HOSPITAL'} nas variáveis de ambiente.`,
+      errorType: "invalid_campaign",
+    };
+  }
+
   try {
-    const authToken = await getAuthToken(socialNetworkId);
+    const authToken = await getAuthToken(socialNetworkId, tokenId);
     console.log("[Colmeia] Using token:", authToken.substring(0, 10) + "...");
 
     const response = await fetch(
@@ -336,7 +376,7 @@ async function sendCampaign(
       console.log("[Colmeia] Token expired, refreshing...");
       tokenCache.delete(socialNetworkId);
 
-      const newToken = await getAuthToken(socialNetworkId);
+      const newToken = await getAuthToken(socialNetworkId, tokenId);
       const retryResponse = await fetch(
         `${COLMEIA_CONFIG.baseUrl}/marketing-send-campaign`,
         {
@@ -405,11 +445,13 @@ export const whatsappService = {
       };
 
       // Build campaign config if hospital/campaign IDs are provided
+      const hospitalConfig = getHospitalConfig(hospitalId);
       const campaignConfig: CampaignConfig | undefined =
         hospitalId && campaignActionId
           ? {
-              socialNetworkId: getSocialNetworkId(hospitalId),
+              socialNetworkId: hospitalConfig.socialNetworkId,
               campaignActionId,
+              tokenId: hospitalConfig.tokenId,
             }
           : undefined;
 
@@ -473,11 +515,13 @@ export const whatsappService = {
       });
 
       // Build campaign config if hospital/campaign IDs are provided
+      const hospitalConfig = getHospitalConfig(hospitalId);
       const campaignConfig: CampaignConfig | undefined =
         hospitalId && campaignActionId
           ? {
-              socialNetworkId: getSocialNetworkId(hospitalId),
+              socialNetworkId: hospitalConfig.socialNetworkId,
               campaignActionId,
+              tokenId: hospitalConfig.tokenId,
             }
           : undefined;
 
@@ -535,9 +579,9 @@ export const whatsappService = {
    * Force token refresh (useful for debugging)
    */
   async refreshToken(hospitalId?: string): Promise<void> {
-    const socialNetworkId = getSocialNetworkId(hospitalId);
-    tokenCache.delete(socialNetworkId);
-    await getAuthToken(socialNetworkId);
+    const hospitalConfig = getHospitalConfig(hospitalId);
+    tokenCache.delete(hospitalConfig.socialNetworkId);
+    await getAuthToken(hospitalConfig.socialNetworkId, hospitalConfig.tokenId);
   },
 
   /**
