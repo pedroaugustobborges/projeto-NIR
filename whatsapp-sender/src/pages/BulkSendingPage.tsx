@@ -5,6 +5,7 @@ import { Template, CSVRow, HOSPITALS } from '../types';
 import { templateService } from '../services/templateService';
 import { whatsappService } from '../services/whatsappService';
 import { historyService } from '../services/historyService';
+import { useAuth } from '../contexts/AuthContext';
 import { parseCSV, downloadSampleCSV } from '../utils/csvParser';
 import { Button, Select, FileUpload, Table } from '../components/ui';
 import Layout from '../components/layout/Layout';
@@ -29,6 +30,7 @@ const getHospitalName = (hospitalId?: string | null): string | null => {
 };
 
 export default function BulkSendingPage() {
+  const { filterByUserHospitals } = useAuth();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [csvFile, setCsvFile] = useState<File | null>(null);
@@ -48,7 +50,9 @@ export default function BulkSendingPage() {
     try {
       setTemplatesLoading(true);
       const data = await templateService.getAll();
-      setTemplates(data);
+      // Filter templates by user's assigned hospitals
+      const filteredData = filterByUserHospitals(data);
+      setTemplates(filteredData);
     } catch (error) {
       console.error('Erro ao carregar templates:', error);
       toast.error('Erro ao carregar templates');

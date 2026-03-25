@@ -38,6 +38,7 @@ import toast from "react-hot-toast";
 import { supabase } from "../services/supabase";
 import { Template, SendingHistory, HOSPITALS } from "../types";
 import { templateService } from "../services/templateService";
+import { useAuth } from "../contexts/AuthContext";
 import { Button, Select } from "../components/ui";
 import Layout from "../components/layout/Layout";
 
@@ -84,6 +85,7 @@ const RANK_COLORS = [
 ];
 
 export default function DashboardPage() {
+  const { filterByUserHospitals, userHospitals, isAdmin } = useAuth();
   const [data, setData] = useState<DashboardData>({
     history: [],
     templates: [],
@@ -118,11 +120,21 @@ export default function DashboardPage() {
 
       if (historyError) throw historyError;
 
-      // Fetch templates
-      const templates = await templateService.getAll();
+      // Fetch templates and filter by user's hospitals
+      const allTemplates = await templateService.getAll();
+      const templates = filterByUserHospitals(allTemplates);
+
+      // Filter history by user's hospitals (via template's hospital_id)
+      const filteredHistory = isAdmin
+        ? (historyData || [])
+        : (historyData || []).filter((item) => {
+            const template = allTemplates.find((t) => t.id === item.template_id);
+            if (!template?.hospital_id) return true; // Show items without hospital
+            return userHospitals.includes(template.hospital_id);
+          });
 
       setData({
-        history: historyData || [],
+        history: filteredHistory,
         templates,
       });
     } catch (error) {
@@ -294,10 +306,12 @@ export default function DashboardPage() {
       .slice(0, 5);
   }, [filteredHistory]);
 
-  // Hospital options for filter
+  // Hospital options for filter (filtered by user's access)
   const hospitalOptions = [
     { value: "", label: "Todos" },
-    ...HOSPITALS.map((h) => ({ value: h.id, label: h.name })),
+    ...HOSPITALS
+      .filter((h) => isAdmin || userHospitals.includes(h.id))
+      .map((h) => ({ value: h.id, label: h.name })),
   ];
 
   // Template options for filter

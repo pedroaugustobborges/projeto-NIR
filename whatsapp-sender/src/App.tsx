@@ -89,11 +89,14 @@ function App() {
           </ProtectedRoute>
         }
       />
+      {/* Admin routes */}
       <Route
         path="/templates"
         element={
           <ProtectedRoute>
-            <TemplatesPage />
+            <AdminRoute>
+              <TemplatesPage />
+            </AdminRoute>
           </ProtectedRoute>
         }
       />
@@ -122,7 +125,6 @@ function App() {
         }
       />
 
-      {/* Admin routes */}
       <Route
         path="/users"
         element={

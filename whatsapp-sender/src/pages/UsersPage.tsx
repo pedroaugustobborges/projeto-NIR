@@ -10,10 +10,12 @@ import {
   User as UserIcon,
   Check,
   Ban,
+  Building2,
 } from 'lucide-react';
 import Layout from '@/components/layout/Layout';
 import { User, userService, CreateUserData, UpdateUserData } from '@/services/userService';
 import { useAuth } from '@/contexts/AuthContext';
+import { HOSPITALS } from '@/types';
 import toast from 'react-hot-toast';
 
 type ModalMode = 'create' | 'edit' | 'delete' | null;
@@ -35,6 +37,7 @@ export default function UsersPage() {
     password: '',
     confirmPassword: '',
     role: 'user' as 'admin' | 'user',
+    hospitals: [] as string[],
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
@@ -56,6 +59,7 @@ export default function UsersPage() {
       password: '',
       confirmPassword: '',
       role: 'user',
+      hospitals: [],
     });
     setFormErrors({});
     setShowPassword(false);
@@ -70,6 +74,7 @@ export default function UsersPage() {
       password: '',
       confirmPassword: '',
       role: user.role,
+      hospitals: user.hospitals || [],
     });
     setFormErrors({});
     setShowPassword(false);
@@ -90,8 +95,18 @@ export default function UsersPage() {
       password: '',
       confirmPassword: '',
       role: 'user',
+      hospitals: [],
     });
     setFormErrors({});
+  };
+
+  const toggleHospital = (hospitalId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      hospitals: prev.hospitals.includes(hospitalId)
+        ? prev.hospitals.filter(h => h !== hospitalId)
+        : [...prev.hospitals, hospitalId],
+    }));
   };
 
   const validateForm = (): boolean => {
@@ -126,6 +141,11 @@ export default function UsersPage() {
       }
     }
 
+    // Require at least one hospital for non-admin users
+    if (formData.role === 'user' && formData.hospitals.length === 0) {
+      errors.hospitals = 'Selecione pelo menos um hospital';
+    }
+
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -143,6 +163,7 @@ export default function UsersPage() {
           name: formData.name,
           password: formData.password,
           role: formData.role,
+          hospitals: formData.role === 'admin' ? [] : formData.hospitals,
         };
         await userService.create(createData);
         toast.success('Usuário criado com sucesso!');
@@ -151,6 +172,7 @@ export default function UsersPage() {
           email: formData.email,
           name: formData.name,
           role: formData.role,
+          hospitals: formData.role === 'admin' ? [] : formData.hospitals,
         };
         if (formData.password) {
           updateData.password = formData.password;
@@ -249,6 +271,9 @@ export default function UsersPage() {
                       Perfil
                     </th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">
+                      Hospitais
+                    </th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">
                       Status
                     </th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700 dark:text-gray-300">
@@ -300,6 +325,31 @@ export default function UsersPage() {
                         >
                           {user.role === 'admin' ? 'Administrador' : 'Usuário'}
                         </span>
+                      </td>
+                      <td className="py-4 px-4">
+                        {user.role === 'admin' ? (
+                          <span className="text-sm text-purple-600 dark:text-purple-400 font-medium">
+                            Todos
+                          </span>
+                        ) : user.hospitals && user.hospitals.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {user.hospitals.map((hospitalId) => {
+                              const hospital = HOSPITALS.find(h => h.id === hospitalId);
+                              return hospital ? (
+                                <span
+                                  key={hospitalId}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                                >
+                                  {hospital.name}
+                                </span>
+                              ) : null;
+                            })}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-gray-400 dark:text-gray-500">
+                            Nenhum
+                          </span>
+                        )}
                       </td>
                       <td className="py-4 px-4">
                         <button
@@ -485,6 +535,7 @@ export default function UsersPage() {
                     setFormData({
                       ...formData,
                       role: e.target.value as 'admin' | 'user',
+                      hospitals: e.target.value === 'admin' ? [] : formData.hospitals,
                     })
                   }
                   className="input dark:bg-gray-700 dark:border-gray-600 dark:text-white"
@@ -493,6 +544,61 @@ export default function UsersPage() {
                   <option value="admin">Administrador</option>
                 </select>
               </div>
+
+              {/* Hospitals (only for non-admin users) */}
+              {formData.role === 'user' && (
+                <div>
+                  <label className="label dark:text-gray-300">
+                    Hospitais
+                    <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">
+                      (selecione os hospitais que o usuário pode acessar)
+                    </span>
+                  </label>
+                  <div className="space-y-2 mt-2">
+                    {HOSPITALS.map((hospital) => (
+                      <label
+                        key={hospital.id}
+                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                          formData.hospitals.includes(hospital.id)
+                            ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700'
+                            : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={formData.hospitals.includes(hospital.id)}
+                          onChange={() => toggleHospital(hospital.id)}
+                          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                        />
+                        <Building2 className={`w-4 h-4 ${
+                          formData.hospitals.includes(hospital.id)
+                            ? 'text-blue-600 dark:text-blue-400'
+                            : 'text-gray-400'
+                        }`} />
+                        <span className={`font-medium ${
+                          formData.hospitals.includes(hospital.id)
+                            ? 'text-blue-700 dark:text-blue-300'
+                            : 'text-gray-700 dark:text-gray-300'
+                        }`}>
+                          {hospital.name}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  {formErrors.hospitals && (
+                    <p className="text-sm text-red-500 mt-1">{formErrors.hospitals}</p>
+                  )}
+                </div>
+              )}
+
+              {formData.role === 'admin' && (
+                <div className="flex items-center gap-2 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
+                  <Shield className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                  <span className="text-sm text-purple-700 dark:text-purple-300">
+                    Administradores têm acesso a todos os hospitais e funcionalidades
+                  </span>
+                </div>
+              )}
 
               {/* Actions */}
               <div className="flex gap-3 pt-4">

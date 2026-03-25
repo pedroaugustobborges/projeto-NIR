@@ -13,6 +13,7 @@ export interface User {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  hospitals?: string[]; // Array of hospital IDs the user has access to
 }
 
 export interface CreateUserData {
@@ -20,6 +21,7 @@ export interface CreateUserData {
   password: string;
   name: string;
   role: 'admin' | 'user';
+  hospitals?: string[]; // Hospital IDs to assign
 }
 
 export interface UpdateUserData {
@@ -28,6 +30,7 @@ export interface UpdateUserData {
   role?: 'admin' | 'user';
   is_active?: boolean;
   password?: string;
+  hospitals?: string[]; // Hospital IDs to assign (replaces existing)
 }
 
 /**
@@ -43,6 +46,56 @@ async function hashPassword(password: string): Promise<string> {
 }
 
 export const userService = {
+  /**
+   * Get hospitals for a user
+   */
+  async getUserHospitals(userId: string): Promise<string[]> {
+    const { data, error } = await supabase
+      .from('user_hospitals')
+      .select('hospital_id')
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Error fetching user hospitals:', error);
+      return [];
+    }
+
+    return data?.map(h => h.hospital_id) || [];
+  },
+
+  /**
+   * Set hospitals for a user (replaces existing assignments)
+   */
+  async setUserHospitals(userId: string, hospitalIds: string[]): Promise<boolean> {
+    // Delete existing hospital assignments
+    const { error: deleteError } = await supabase
+      .from('user_hospitals')
+      .delete()
+      .eq('user_id', userId);
+
+    if (deleteError) {
+      console.error('Error deleting user hospitals:', deleteError);
+      return false;
+    }
+
+    // Insert new hospital assignments
+    if (hospitalIds.length > 0) {
+      const { error: insertError } = await supabase
+        .from('user_hospitals')
+        .insert(hospitalIds.map(hospitalId => ({
+          user_id: userId,
+          hospital_id: hospitalId,
+        })));
+
+      if (insertError) {
+        console.error('Error inserting user hospitals:', insertError);
+        return false;
+      }
+    }
+
+    return true;
+  },
+
   /**
    * Authenticate user with email and password
    */
@@ -62,11 +115,14 @@ export const userService = {
       return null;
     }
 
-    return data as User;
+    // Fetch user's hospitals
+    const hospitals = await this.getUserHospitals(data.id);
+
+    return { ...data, hospitals } as User;
   },
 
   /**
-   * Get all users
+   * Get all users with their hospital assignments
    */
   async getAll(): Promise<User[]> {
     const { data, error } = await supabase
@@ -79,11 +135,27 @@ export const userService = {
       return [];
     }
 
-    return data as User[];
+    // Fetch hospitals for all users
+    const { data: hospitalData } = await supabase
+      .from('user_hospitals')
+      .select('user_id, hospital_id');
+
+    // Map hospitals to users
+    const hospitalsByUser = new Map<string, string[]>();
+    hospitalData?.forEach(h => {
+      const existing = hospitalsByUser.get(h.user_id) || [];
+      existing.push(h.hospital_id);
+      hospitalsByUser.set(h.user_id, existing);
+    });
+
+    return (data as User[]).map(user => ({
+      ...user,
+      hospitals: hospitalsByUser.get(user.id) || [],
+    }));
   },
 
   /**
-   * Get user by ID
+   * Get user by ID with hospital assignments
    */
   async getById(id: string): Promise<User | null> {
     const { data, error } = await supabase
@@ -97,11 +169,14 @@ export const userService = {
       return null;
     }
 
-    return data as User;
+    // Fetch user's hospitals
+    const hospitals = await this.getUserHospitals(id);
+
+    return { ...data, hospitals } as User;
   },
 
   /**
-   * Create new user
+   * Create new user with hospital assignments
    */
   async create(userData: CreateUserData): Promise<User | null> {
     const passwordHash = await hashPassword(userData.password);
@@ -126,11 +201,16 @@ export const userService = {
       );
     }
 
-    return data as User;
+    // Assign hospitals if provided (only for non-admin users)
+    if (userData.hospitals && userData.hospitals.length > 0 && userData.role !== 'admin') {
+      await this.setUserHospitals(data.id, userData.hospitals);
+    }
+
+    return { ...data, hospitals: userData.hospitals || [] } as User;
   },
 
   /**
-   * Update user
+   * Update user with hospital assignments
    */
   async update(id: string, userData: UpdateUserData): Promise<User | null> {
     const updateData: Record<string, unknown> = {};
@@ -159,7 +239,17 @@ export const userService = {
       );
     }
 
-    return data as User;
+    // Update hospital assignments if provided
+    if (userData.hospitals !== undefined) {
+      // If user is admin, clear hospital assignments (admins have access to all)
+      const hospitalIds = userData.role === 'admin' ? [] : userData.hospitals;
+      await this.setUserHospitals(id, hospitalIds);
+    }
+
+    // Fetch updated hospitals
+    const hospitals = await this.getUserHospitals(id);
+
+    return { ...data, hospitals } as User;
   },
 
   /**

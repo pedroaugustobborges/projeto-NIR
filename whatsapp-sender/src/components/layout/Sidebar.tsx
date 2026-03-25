@@ -21,11 +21,6 @@ const navigation = [
     icon: LayoutDashboard,
   },
   {
-    name: "Cadastro de Templates",
-    href: "/templates",
-    icon: FileText,
-  },
-  {
     name: "Disparo Individual",
     href: "/individual",
     icon: Send,
@@ -43,6 +38,11 @@ const navigation = [
 ];
 
 const adminNavigation = [
+  {
+    name: "Cadastro de Templates",
+    href: "/templates",
+    icon: FileText,
+  },
   {
     name: "Usuários",
     href: "/users",

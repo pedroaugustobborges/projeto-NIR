@@ -28,14 +28,17 @@ import toast from "react-hot-toast";
 import { supabase } from "../services/supabase";
 import { SendingHistory, SendingStatus, Template, HOSPITALS } from "../types";
 import { templateService } from "../services/templateService";
+import { useAuth } from "../contexts/AuthContext";
 import { Button, Table, Select } from "../components/ui";
 import Layout from "../components/layout/Layout";
 
 const ITEMS_PER_PAGE_OPTIONS = [10, 50, 100, 500];
 
 export default function HistoryPage() {
+  const { filterByUserHospitals, userHospitals, isAdmin } = useAuth();
   const [history, setHistory] = useState<SendingHistory[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [allTemplates, setAllTemplates] = useState<Template[]>([]); // Keep all templates for filtering history
   const [loading, setLoading] = useState(true);
   const [selectedItem, setSelectedItem] = useState<SendingHistory | null>(null);
 
@@ -111,9 +114,22 @@ export default function HistoryPage() {
 
       // Fetch templates
       const templatesData = await templateService.getAll();
+      setAllTemplates(templatesData);
 
-      setHistory(historyData || []);
-      setTemplates(templatesData);
+      // Filter templates by user's hospitals for the filter dropdown
+      const filteredTemplates = filterByUserHospitals(templatesData);
+      setTemplates(filteredTemplates);
+
+      // Filter history by user's hospitals (via template's hospital_id)
+      const filteredHistory = isAdmin
+        ? (historyData || [])
+        : (historyData || []).filter((item) => {
+            const template = templatesData.find((t) => t.id === item.template_id);
+            if (!template?.hospital_id) return true; // Show items without hospital
+            return userHospitals.includes(template.hospital_id);
+          });
+
+      setHistory(filteredHistory);
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
       toast.error("Erro ao carregar histórico");
@@ -129,10 +145,10 @@ export default function HistoryPage() {
       return;
     }
 
-    // Get hospital name from template
+    // Get hospital name from template - use allTemplates for lookup
     const getHospitalName = (templateId?: string): string => {
       if (!templateId) return "";
-      const template = templates.find((t) => t.id === templateId);
+      const template = allTemplates.find((t) => t.id === templateId);
       if (!template?.hospital_id) return "";
       const hospital = HOSPITALS.find((h) => h.id === template.hospital_id);
       return hospital?.name || "";
@@ -267,10 +283,12 @@ export default function HistoryPage() {
     }
   };
 
-  // Filter options
+  // Filter options (filtered by user's access)
   const hospitalOptions = [
     { value: "", label: "Todos" },
-    ...HOSPITALS.map((h) => ({ value: h.id, label: h.name })),
+    ...HOSPITALS
+      .filter((h) => isAdmin || userHospitals.includes(h.id))
+      .map((h) => ({ value: h.id, label: h.name })),
   ];
 
   const templateOptions = [
@@ -306,9 +324,9 @@ export default function HistoryPage() {
         return false;
       }
 
-      // Hospital filter (via template)
+      // Hospital filter (via template) - use allTemplates for lookup
       if (selectedHospital) {
-        const template = templates.find((t) => t.id === item.template_id);
+        const template = allTemplates.find((t) => t.id === item.template_id);
         if (!template || template.hospital_id !== selectedHospital) {
           return false;
         }
@@ -318,7 +336,7 @@ export default function HistoryPage() {
     });
   }, [
     history,
-    templates,
+    allTemplates,
     selectedHospital,
     selectedTemplate,
     selectedType,

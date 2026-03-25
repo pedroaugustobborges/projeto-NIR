@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { User, userService } from '@/services/userService';
 
 interface AuthContextType {
@@ -8,6 +8,9 @@ interface AuthContextType {
   logout: () => void;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  userHospitals: string[]; // Hospital IDs the user has access to
+  hasHospitalAccess: (hospitalId: string | null | undefined) => boolean; // Check if user can access a hospital
+  filterByUserHospitals: <T extends { hospital_id?: string | null }>(items: T[]) => T[]; // Filter items by user's hospitals
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -57,13 +60,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(AUTH_STORAGE_KEY);
   };
 
+  // Get user's hospitals (admin has access to all)
+  const userHospitals = user?.hospitals || [];
+  const isAdmin = user?.role === 'admin';
+
+  // Check if user has access to a specific hospital
+  const hasHospitalAccess = useCallback((hospitalId: string | null | undefined): boolean => {
+    // Admin has access to everything
+    if (isAdmin) return true;
+    // If no hospital ID specified, allow (for backward compatibility)
+    if (!hospitalId) return true;
+    // Check if user has access to this hospital
+    return userHospitals.includes(hospitalId);
+  }, [isAdmin, userHospitals]);
+
+  // Filter items by user's hospitals
+  const filterByUserHospitals = useCallback(<T extends { hospital_id?: string | null }>(items: T[]): T[] => {
+    // Admin sees everything
+    if (isAdmin) return items;
+    // Filter by user's hospitals
+    return items.filter(item => {
+      // If item has no hospital, show it (backward compatibility)
+      if (!item.hospital_id) return true;
+      // Check if user has access to this hospital
+      return userHospitals.includes(item.hospital_id);
+    });
+  }, [isAdmin, userHospitals]);
+
   const value: AuthContextType = {
     user,
     isLoading,
     login,
     logout,
     isAuthenticated: !!user,
-    isAdmin: user?.role === 'admin',
+    isAdmin,
+    userHospitals,
+    hasHospitalAccess,
+    filterByUserHospitals,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
