@@ -270,7 +270,27 @@ export const userService = {
   },
 
   /**
-   * Change user password
+   * Verify user's current password
+   */
+  async verifyPassword(id: string, password: string): Promise<boolean> {
+    const passwordHash = await hashPassword(password);
+
+    const { data, error } = await supabase
+      .from('app_users')
+      .select('id')
+      .eq('id', id)
+      .eq('password_hash', passwordHash)
+      .single();
+
+    if (error || !data) {
+      return false;
+    }
+
+    return true;
+  },
+
+  /**
+   * Change user password (with current password verification)
    */
   async changePassword(id: string, newPassword: string): Promise<boolean> {
     const passwordHash = await hashPassword(newPassword);
@@ -282,6 +302,23 @@ export const userService = {
 
     if (error) {
       console.error('Error changing password:', error);
+      return false;
+    }
+
+    return true;
+  },
+
+  /**
+   * Update user's own profile (name only - for self-service)
+   */
+  async updateProfile(id: string, name: string): Promise<boolean> {
+    const { error } = await supabase
+      .from('app_users')
+      .update({ name })
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error updating profile:', error);
       return false;
     }
 
