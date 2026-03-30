@@ -15,6 +15,7 @@ import {
   Eye,
   Filter,
   Download,
+  AlertTriangle,
 } from "lucide-react";
 import {
   format,
@@ -122,9 +123,11 @@ export default function HistoryPage() {
 
       // Filter history by user's hospitals (via template's hospital_id)
       const filteredHistory = isAdmin
-        ? (historyData || [])
+        ? historyData || []
         : (historyData || []).filter((item) => {
-            const template = templatesData.find((t) => t.id === item.template_id);
+            const template = templatesData.find(
+              (t) => t.id === item.template_id,
+            );
             if (!template?.hospital_id) return true; // Show items without hospital
             return userHospitals.includes(template.hospital_id);
           });
@@ -258,6 +261,8 @@ export default function HistoryPage() {
         return <XCircle className="w-4 h-4 text-red-500" />;
       case "pending":
         return <Clock className="w-4 h-4 text-yellow-500" />;
+      case "warning":
+        return <AlertTriangle className="w-4 h-4 text-amber-500" />;
     }
   };
 
@@ -269,6 +274,8 @@ export default function HistoryPage() {
         return "Falhou";
       case "pending":
         return "Pendente";
+      case "warning":
+        return "Sucesso com ressalva";
     }
   };
 
@@ -280,15 +287,17 @@ export default function HistoryPage() {
         return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
       case "pending":
         return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
+      case "warning":
+        return "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400";
     }
   };
 
   // Filter options (filtered by user's access)
   const hospitalOptions = [
     { value: "", label: "Todos" },
-    ...HOSPITALS
-      .filter((h) => isAdmin || userHospitals.includes(h.id))
-      .map((h) => ({ value: h.id, label: h.name })),
+    ...HOSPITALS.filter((h) => isAdmin || userHospitals.includes(h.id)).map(
+      (h) => ({ value: h.id, label: h.name }),
+    ),
   ];
 
   const templateOptions = [
@@ -464,12 +473,22 @@ export default function HistoryPage() {
       key: "status",
       header: "Status",
       render: (item: SendingHistory) => (
-        <span
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${getStatusClass(item.status)}`}
-        >
-          {getStatusIcon(item.status)}
-          {getStatusLabel(item.status)}
-        </span>
+        <div className="flex flex-col gap-1">
+          <span
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${getStatusClass(item.status)}`}
+          >
+            {getStatusIcon(item.status)}
+            {getStatusLabel(item.status)}
+          </span>
+          {item.warning_message && (
+            <span
+              className="text-xs text-amber-600 dark:text-amber-400 max-w-[200px] truncate"
+              title={item.warning_message}
+            >
+              {item.warning_message}
+            </span>
+          )}
+        </div>
       ),
     },
     {
@@ -495,6 +514,7 @@ export default function HistoryPage() {
       .length,
     bulk: filteredHistory.filter((h) => h.sending_type === "bulk").length,
     success: filteredHistory.filter((h) => h.status === "success").length,
+    warning: filteredHistory.filter((h) => h.status === "warning").length,
     failed: filteredHistory.filter((h) => h.status === "failed").length,
   };
 
@@ -521,14 +541,16 @@ export default function HistoryPage() {
               Exportar CSV
             </Button>
             <Button variant="outline" onClick={loadData} disabled={loading}>
-              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={`w-4 h-4 ${loading ? "animate-spin" : ""}`}
+              />
               Atualizar
             </Button>
           </div>
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
             <p className="text-sm text-gray-500 dark:text-gray-400">Total</p>
             <p className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -553,6 +575,14 @@ export default function HistoryPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400">Sucesso</p>
             <p className="text-2xl font-bold text-green-600 dark:text-green-400">
               {stats.success}
+            </p>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Ressalvas
+            </p>
+            <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+              {stats.warning}
             </p>
           </div>
           <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">

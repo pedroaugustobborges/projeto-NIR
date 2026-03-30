@@ -76,7 +76,7 @@ export interface TemplateFormData {
 }
 
 // Sending History Types
-export type SendingStatus = "success" | "failed" | "pending";
+export type SendingStatus = "success" | "failed" | "pending" | "warning";
 export type SendingType = "individual" | "bulk";
 
 export interface SendingHistory {
@@ -89,6 +89,7 @@ export interface SendingHistory {
   sending_type: SendingType;
   status: SendingStatus;
   error_message?: string;
+  warning_message?: string; // Warning message for "warning" status
   total_sent?: number;
   created_at: string;
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Send,
   CheckCircle2,
@@ -6,6 +6,7 @@ import {
   Building2,
   XCircle,
   AlertOctagon,
+  Phone,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Template, HOSPITALS } from "../types";
@@ -61,6 +62,13 @@ export default function IndividualSendingPage() {
   };
 
   const selectedTemplate = templates.find((t) => t.id === selectedTemplateId);
+
+  // Validate phone number in real-time
+  const phoneValidation = useMemo(() => {
+    const cleanPhone = phone.replace(/\D/g, "");
+    if (cleanPhone.length < 10) return null; // Don't validate incomplete numbers
+    return whatsappService.validatePhone(cleanPhone);
+  }, [phone]);
 
   const getTemplateParameters = (
     template: Template,
@@ -172,16 +180,26 @@ export default function IndividualSendingPage() {
         return;
       }
 
+      // Determine warning message based on phone validation
+      const warningMessage = phoneValidation?.isPotentiallyInvalid
+        ? phoneValidation.reason
+        : (result.warning || undefined);
+
       // Log to history only on success
       await historyService.createIndividual({
         template_id: selectedTemplateId,
         template_name: selectedTemplate.name,
         phone: phoneDigits,
         parameters,
+        warning: warningMessage,
       });
 
       setSuccess(true);
-      toast.success("Mensagem enviada com sucesso!");
+      if (warningMessage) {
+        toast.success("Mensagem enviada com ressalva!");
+      } else {
+        toast.success("Mensagem enviada com sucesso!");
+      }
 
       // Reset form after success
       setPhone("");
@@ -275,6 +293,35 @@ export default function IndividualSendingPage() {
               disabled={loading}
               required
             />
+
+            {/* Phone validation warning */}
+            {phoneValidation && !phoneValidation.isValid && (
+              <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                <Phone className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-red-800 dark:text-red-300">
+                    Número inválido
+                  </p>
+                  <p className="text-xs text-red-700 dark:text-red-400 mt-1">
+                    {phoneValidation.reason}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {phoneValidation && phoneValidation.isValid && phoneValidation.isPotentiallyInvalid && (
+              <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                    Atenção
+                  </p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                    {phoneValidation.reason}. A mensagem pode não ser entregue se o número não existir no WhatsApp.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {templateParams.length > 0 && (
               <div className="space-y-4">

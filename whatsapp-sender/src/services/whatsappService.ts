@@ -30,15 +30,24 @@ interface SendIndividualParams {
   campaignActionId?: string;
 }
 
+interface PhoneValidationResult {
+  isValid: boolean;
+  isPotentiallyInvalid: boolean;
+  reason?: string;
+  cleanPhone: string;
+}
+
 interface SendMessageResult {
   success: boolean;
   message: string;
-  errorType?: 'invalid_campaign' | 'parameter_mismatch' | 'missing_parameter' | 'api_error' | 'network_error';
+  errorType?: 'invalid_campaign' | 'parameter_mismatch' | 'missing_parameter' | 'api_error' | 'network_error' | 'invalid_phone';
   errorDetails?: {
     expectedParams?: string[];
     receivedParams?: string[];
     description?: string;
   };
+  warning?: string;
+  potentiallyInvalidPhones?: string[];
 }
 
 interface ColmeiaErrorResponse {
@@ -65,6 +74,171 @@ interface ColmeiaTokenResponse {
   token: string;
   type?: string;
   status?: number;
+}
+
+/**
+ * Valid Brazilian DDD (area codes)
+ * Source: ANATEL
+ */
+const VALID_DDDS = [
+  // São Paulo
+  11, 12, 13, 14, 15, 16, 17, 18, 19,
+  // Rio de Janeiro
+  21, 22, 24,
+  // Espírito Santo
+  27, 28,
+  // Minas Gerais
+  31, 32, 33, 34, 35, 37, 38,
+  // Paraná
+  41, 42, 43, 44, 45, 46,
+  // Santa Catarina
+  47, 48, 49,
+  // Rio Grande do Sul
+  51, 53, 54, 55,
+  // Distrito Federal / Goiás
+  61, 62, 64,
+  // Mato Grosso do Sul
+  67,
+  // Mato Grosso
+  65, 66,
+  // Acre
+  68,
+  // Rondônia
+  69,
+  // Bahia
+  71, 73, 74, 75, 77,
+  // Sergipe
+  79,
+  // Pernambuco
+  81, 87,
+  // Alagoas
+  82,
+  // Paraíba
+  83,
+  // Rio Grande do Norte
+  84,
+  // Ceará
+  85, 88,
+  // Piauí
+  86, 89,
+  // Maranhão
+  98, 99,
+  // Pará
+  91, 93, 94,
+  // Amapá
+  96,
+  // Amazonas
+  92, 97,
+  // Roraima
+  95,
+  // Tocantins
+  63,
+];
+
+/**
+ * Validate Brazilian phone number
+ * Returns validation result with details
+ */
+function validatePhoneNumber(phone: string): PhoneValidationResult {
+  let cleanPhone = phone.replace(/\D/g, "");
+
+  // Add country code if not present
+  if (cleanPhone.length === 10 || cleanPhone.length === 11) {
+    cleanPhone = "55" + cleanPhone;
+  }
+
+  // Basic length validation
+  if (cleanPhone.length < 12 || cleanPhone.length > 13) {
+    return {
+      isValid: false,
+      isPotentiallyInvalid: true,
+      reason: "Número de telefone com tamanho inválido",
+      cleanPhone,
+    };
+  }
+
+  // Check country code
+  if (!cleanPhone.startsWith("55")) {
+    return {
+      isValid: false,
+      isPotentiallyInvalid: true,
+      reason: "Código de país inválido (deve ser 55)",
+      cleanPhone,
+    };
+  }
+
+  // Extract DDD (area code)
+  const ddd = parseInt(cleanPhone.substring(2, 4), 10);
+
+  // Check if DDD is valid
+  if (!VALID_DDDS.includes(ddd)) {
+    return {
+      isValid: false,
+      isPotentiallyInvalid: true,
+      reason: `DDD ${ddd} inválido`,
+      cleanPhone,
+    };
+  }
+
+  // Get the local number (without country code and DDD)
+  const localNumber = cleanPhone.substring(4);
+
+  // Check for repeated digits (fake numbers like 111111111, 999999999)
+  const uniqueDigits = new Set(localNumber.split(""));
+  if (uniqueDigits.size === 1) {
+    return {
+      isValid: false,
+      isPotentiallyInvalid: true,
+      reason: `Número inválido: ${localNumber} (dígitos repetidos)`,
+      cleanPhone,
+    };
+  }
+
+  // Check for sequential patterns (like 123456789)
+  const isSequential = localNumber === "123456789" ||
+                       localNumber === "987654321" ||
+                       localNumber === "12345678" ||
+                       localNumber === "87654321";
+  if (isSequential) {
+    return {
+      isValid: false,
+      isPotentiallyInvalid: true,
+      reason: `Número inválido: ${localNumber} (sequência numérica)`,
+      cleanPhone,
+    };
+  }
+
+  // Check for mostly repeated digits (e.g., 111111112, 999999998)
+  const digitCounts: Record<string, number> = {};
+  for (const digit of localNumber) {
+    digitCounts[digit] = (digitCounts[digit] || 0) + 1;
+  }
+  const maxCount = Math.max(...Object.values(digitCounts));
+  if (maxCount >= localNumber.length - 1) {
+    return {
+      isValid: false,
+      isPotentiallyInvalid: true,
+      reason: `Número potencialmente inválido: ${localNumber} (maioria dos dígitos repetidos)`,
+      cleanPhone,
+    };
+  }
+
+  // For 9-digit mobile numbers, check if it starts with 9
+  if (localNumber.length === 9 && !localNumber.startsWith("9")) {
+    return {
+      isValid: true,
+      isPotentiallyInvalid: true,
+      reason: `Celular de 9 dígitos deve começar com 9`,
+      cleanPhone,
+    };
+  }
+
+  // Number passed all validations
+  return {
+    isValid: true,
+    isPotentiallyInvalid: false,
+    cleanPhone,
+  };
 }
 
 /**
@@ -424,23 +598,20 @@ export const whatsappService = {
       const { phone, parameters, hospitalId, campaignActionId } = params;
 
       // Validate phone number
-      let cleanPhone = phone.replace(/\D/g, "");
+      const validation = validatePhoneNumber(phone);
 
-      // Add country code if not present
-      if (cleanPhone.length === 10 || cleanPhone.length === 11) {
-        cleanPhone = "55" + cleanPhone;
-      }
-
-      if (cleanPhone.length < 12 || cleanPhone.length > 13) {
+      if (!validation.isValid) {
+        console.log("[Colmeia] Phone validation failed:", validation.reason);
         return {
           success: false,
-          message: "Número de telefone inválido",
+          message: validation.reason || "Número de telefone inválido",
+          errorType: "invalid_phone",
         };
       }
 
       // Build contact object with parameters
       const contact: ColmeiaContact = {
-        Celular: cleanPhone,
+        Celular: validation.cleanPhone,
         ...parameters,
       };
 
@@ -457,7 +628,7 @@ export const whatsappService = {
 
       console.log(
         "[Colmeia] Sending message to:",
-        cleanPhone,
+        validation.cleanPhone,
         "with params:",
         contact,
         "config:",
@@ -465,6 +636,11 @@ export const whatsappService = {
       );
 
       const result = await sendCampaign([contact], campaignConfig);
+
+      // Add warning if phone is potentially invalid but we still sent
+      if (validation.isPotentiallyInvalid && result.success) {
+        result.warning = `Atenção: ${validation.reason}. A mensagem foi enviada, mas pode não ser entregue se o número não existir no WhatsApp.`;
+      }
 
       return result;
     } catch (error) {
@@ -589,5 +765,39 @@ export const whatsappService = {
    */
   getSocialNetworkIdForHospital(hospitalId: string): string {
     return getSocialNetworkId(hospitalId);
+  },
+
+  /**
+   * Validate a phone number and return detailed result
+   */
+  validatePhone(phone: string): PhoneValidationResult {
+    return validatePhoneNumber(phone);
+  },
+
+  /**
+   * Validate multiple phone numbers and separate valid from invalid
+   */
+  validatePhones(phones: string[]): {
+    valid: Array<{ original: string; clean: string }>;
+    invalid: Array<{ original: string; reason: string }>;
+    warnings: Array<{ original: string; reason: string }>;
+  } {
+    const valid: Array<{ original: string; clean: string }> = [];
+    const invalid: Array<{ original: string; reason: string }> = [];
+    const warnings: Array<{ original: string; reason: string }> = [];
+
+    for (const phone of phones) {
+      const result = validatePhoneNumber(phone);
+      if (!result.isValid) {
+        invalid.push({ original: phone, reason: result.reason || "Número inválido" });
+      } else if (result.isPotentiallyInvalid) {
+        warnings.push({ original: phone, reason: result.reason || "Número possivelmente inválido" });
+        valid.push({ original: phone, clean: result.cleanPhone });
+      } else {
+        valid.push({ original: phone, clean: result.cleanPhone });
+      }
+    }
+
+    return { valid, invalid, warnings };
   },
 };

@@ -33,8 +33,9 @@ CREATE TABLE IF NOT EXISTS sending_history (
   description TEXT,
   phone VARCHAR(20),
   sending_type VARCHAR(20) NOT NULL CHECK (sending_type IN ('individual', 'bulk')),
-  status VARCHAR(20) NOT NULL DEFAULT 'success' CHECK (status IN ('success', 'failed', 'pending')),
+  status VARCHAR(20) NOT NULL DEFAULT 'success' CHECK (status IN ('success', 'failed', 'pending', 'warning')),
   error_message TEXT,
+  warning_message TEXT,
   total_sent INTEGER DEFAULT 1,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

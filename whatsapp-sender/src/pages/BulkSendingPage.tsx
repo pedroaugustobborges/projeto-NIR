@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Send, Download, Upload, AlertCircle, X, AlertTriangle, Building2, XCircle, CheckCircle } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Send, Download, Upload, AlertCircle, X, AlertTriangle, Building2, XCircle, CheckCircle, Phone } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Template, CSVRow, HOSPITALS } from '../types';
 import { templateService } from '../services/templateService';
@@ -10,9 +10,15 @@ import { parseCSV, downloadSampleCSV } from '../utils/csvParser';
 import { Button, Select, FileUpload, Table } from '../components/ui';
 import Layout from '../components/layout/Layout';
 
+interface PhoneValidation {
+  invalid: Array<{ original: string; reason: string }>;
+  warnings: Array<{ original: string; reason: string }>;
+}
+
 interface SendResult {
   success: number;
   failed: number;
+  skippedInvalid: number;
   errors: Array<{
     phone: string;
     message: string;
@@ -36,6 +42,7 @@ export default function BulkSendingPage() {
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [csvData, setCsvData] = useState<CSVRow[]>([]);
   const [csvErrors, setCsvErrors] = useState<string[]>([]);
+  const [phoneValidation, setPhoneValidation] = useState<PhoneValidation>({ invalid: [], warnings: [] });
   const [, setLoading] = useState(false);
   const [templatesLoading, setTemplatesLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -68,6 +75,7 @@ export default function BulkSendingPage() {
     setCsvFile(null);
     setCsvData([]);
     setCsvErrors([]);
+    setPhoneValidation({ invalid: [], warnings: [] });
     setSendResult(null);
   };
 
@@ -75,6 +83,7 @@ export default function BulkSendingPage() {
     setCsvFile(file);
     setCsvData([]);
     setCsvErrors([]);
+    setPhoneValidation({ invalid: [], warnings: [] });
 
     if (!file || !selectedTemplate) return;
 
@@ -88,6 +97,14 @@ export default function BulkSendingPage() {
 
       if (result.data.length > 0) {
         setCsvData(result.data);
+
+        // Validate phone numbers
+        const phones = result.data.map(row => row.phone);
+        const validation = whatsappService.validatePhones(phones);
+        setPhoneValidation({
+          invalid: validation.invalid,
+          warnings: validation.warnings,
+        });
       }
     } catch (error) {
       console.error('Erro ao processar CSV:', error);
@@ -105,25 +122,32 @@ export default function BulkSendingPage() {
     downloadSampleCSV(selectedTemplate);
   };
 
+  // Filter out rows with invalid phone numbers
+  const validRows = useMemo(() => {
+    const invalidPhones = new Set(phoneValidation.invalid.map(p => p.original));
+    return csvData.filter(row => !invalidPhones.has(row.phone));
+  }, [csvData, phoneValidation.invalid]);
+
   const handleSubmit = async () => {
-    if (!selectedTemplate || csvData.length === 0) return;
+    if (!selectedTemplate || validRows.length === 0) return;
 
     try {
       setSending(true);
-      setSendProgress({ sent: 0, total: csvData.length });
+      setSendProgress({ sent: 0, total: validRows.length });
       setSendResult(null);
 
       const result: SendResult = {
         success: 0,
         failed: 0,
+        skippedInvalid: phoneValidation.invalid.length,
         errors: [],
       };
 
       const successfulPhones: string[] = [];
 
       // Send messages via WhatsApp API with template's hospital and campaign configuration
-      for (let i = 0; i < csvData.length; i++) {
-        const row = csvData[i];
+      for (let i = 0; i < validRows.length; i++) {
+        const row = validRows[i];
         const phoneDigits = row.phone.replace(/\D/g, '');
 
         // Build parameters object using the actual template parameter names (case-sensitive for Colmeia)
@@ -169,36 +193,47 @@ export default function BulkSendingPage() {
           // If it's a configuration error, stop sending (all will fail)
           if (sendResponse.errorType === 'invalid_campaign' || sendResponse.errorType === 'parameter_mismatch' || sendResponse.errorType === 'missing_parameter') {
             // Mark remaining as failed with same error
-            for (let j = i + 1; j < csvData.length; j++) {
+            for (let j = i + 1; j < validRows.length; j++) {
               result.failed++;
             }
             break;
           }
         }
 
-        setSendProgress({ sent: i + 1, total: csvData.length });
+        setSendProgress({ sent: i + 1, total: validRows.length });
       }
 
       setSendResult(result);
 
       // Log bulk sending to history only if there were successes
       if (result.success > 0) {
+        // Build warning message from phone validation warnings
+        const warningReasons = phoneValidation.warnings.map(w => w.reason);
+        const uniqueWarnings = [...new Set(warningReasons)];
+        const warningMessage = uniqueWarnings.length > 0
+          ? uniqueWarnings.join('; ')
+          : undefined;
+
         await historyService.createBulk({
           template_id: selectedTemplateId,
           template_name: selectedTemplate.name,
           total_sent: result.success,
           description: csvFile?.name || 'Disparo em massa',
           phone_list: successfulPhones,
+          warningCount: phoneValidation.warnings.length,
+          warningMessage,
         });
       }
 
       // Show appropriate message
+      const skippedMsg = result.skippedInvalid > 0 ? ` (${result.skippedInvalid} ignorados por número inválido)` : '';
       if (result.failed === 0) {
-        toast.success(`${result.success} mensagens enviadas com sucesso!`);
+        toast.success(`${result.success} mensagens enviadas com sucesso!${skippedMsg}`);
         // Reset form only on complete success
         setCsvFile(null);
         setCsvData([]);
         setCsvErrors([]);
+        setPhoneValidation({ invalid: [], warnings: [] });
       } else if (result.success === 0) {
         toast.error(`Falha ao enviar todas as ${result.failed} mensagens`);
       } else {
@@ -337,18 +372,80 @@ export default function BulkSendingPage() {
             </div>
           )}
 
+          {/* Invalid Phone Numbers */}
+          {phoneValidation.invalid.length > 0 && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <Phone className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <h4 className="font-medium text-red-800 dark:text-red-400">
+                    Números inválidos ({phoneValidation.invalid.length}) - Serão ignorados no envio
+                  </h4>
+                  <ul className="text-sm text-red-700 dark:text-red-300 space-y-1">
+                    {phoneValidation.invalid.slice(0, 5).map((item, index) => (
+                      <li key={index}>
+                        <span className="font-mono">{item.original}</span> - {item.reason}
+                      </li>
+                    ))}
+                    {phoneValidation.invalid.length > 5 && (
+                      <li className="font-medium">
+                        ... e mais {phoneValidation.invalid.length - 5} números inválidos
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Phone Warnings */}
+          {phoneValidation.warnings.length > 0 && (
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <h4 className="font-medium text-amber-800 dark:text-amber-400">
+                    Números com possíveis problemas ({phoneValidation.warnings.length})
+                  </h4>
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mb-2">
+                    Estes números serão enviados, mas podem não ser entregues se não existirem no WhatsApp.
+                  </p>
+                  <ul className="text-sm text-amber-700 dark:text-amber-300 space-y-1">
+                    {phoneValidation.warnings.slice(0, 3).map((item, index) => (
+                      <li key={index}>
+                        <span className="font-mono">{item.original}</span> - {item.reason}
+                      </li>
+                    ))}
+                    {phoneValidation.warnings.length > 3 && (
+                      <li className="font-medium">
+                        ... e mais {phoneValidation.warnings.length - 3} com avisos
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Preview */}
           {csvData.length > 0 && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-medium text-gray-900 dark:text-white">
-                  Prévia dos Dados ({csvData.length} registros)
+                  Prévia dos Dados ({csvData.length} registros
+                  {phoneValidation.invalid.length > 0 && (
+                    <span className="text-red-600 dark:text-red-400">
+                      {' '}- {phoneValidation.invalid.length} inválidos
+                    </span>
+                  )}
+                  {' '}= <span className="text-green-600 dark:text-green-400">{validRows.length} válidos</span>)
                 </h3>
                 <button
                   onClick={() => {
                     setCsvFile(null);
                     setCsvData([]);
                     setCsvErrors([]);
+                    setPhoneValidation({ invalid: [], warnings: [] });
                   }}
                   className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center gap-1"
                 >
@@ -427,13 +524,18 @@ export default function BulkSendingPage() {
                           ? 'Falha ao enviar mensagens'
                           : 'Envio parcialmente concluído'}
                     </p>
-                    <div className="flex gap-4 mt-1 text-sm">
+                    <div className="flex flex-wrap gap-4 mt-1 text-sm">
                       <span className="text-green-700 dark:text-green-400">
                         {sendResult.success} enviadas
                       </span>
                       {sendResult.failed > 0 && (
                         <span className="text-red-700 dark:text-red-400">
                           {sendResult.failed} falharam
+                        </span>
+                      )}
+                      {sendResult.skippedInvalid > 0 && (
+                        <span className="text-amber-700 dark:text-amber-400">
+                          {sendResult.skippedInvalid} ignorados (número inválido)
                         </span>
                       )}
                     </div>
@@ -502,11 +604,16 @@ export default function BulkSendingPage() {
           <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
             <Button
               onClick={handleSubmit}
-              disabled={csvData.length === 0 || sending}
+              disabled={validRows.length === 0 || sending}
               loading={sending}
             >
               <Send className="w-4 h-4" />
-              Enviar {csvData.length > 0 ? `${csvData.length} Mensagens` : 'Mensagens'}
+              Enviar {validRows.length > 0 ? `${validRows.length} Mensagens` : 'Mensagens'}
+              {phoneValidation.invalid.length > 0 && (
+                <span className="text-xs opacity-75 ml-1">
+                  ({phoneValidation.invalid.length} ignorados)
+                </span>
+              )}
             </Button>
           </div>
         </div>

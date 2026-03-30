@@ -6,6 +6,7 @@ interface CreateIndividualParams {
   template_name: string;
   phone: string;
   parameters?: Record<string, string>;
+  warning?: string; // Warning message if phone has validation issues
 }
 
 interface CreateBulkParams {
@@ -14,6 +15,8 @@ interface CreateBulkParams {
   total_sent: number;
   description?: string;
   phone_list?: string[]; // Array of phone numbers
+  warningCount?: number; // Number of phones with warnings
+  warningMessage?: string; // Warning description
 }
 
 export const historyService = {
@@ -49,7 +52,8 @@ export const historyService = {
         template_name: params.template_name,
         phone: params.phone,
         sending_type: 'individual',
-        status: 'success',
+        status: params.warning ? 'warning' : 'success',
+        warning_message: params.warning || null,
         total_sent: 1,
       })
       .select()
@@ -61,6 +65,7 @@ export const historyService = {
 
   // Create history entry for bulk sending
   async createBulk(params: CreateBulkParams): Promise<SendingHistory> {
+    const hasWarnings = params.warningCount && params.warningCount > 0;
     const { data, error } = await supabase
       .from('sending_history')
       .insert({
@@ -68,7 +73,8 @@ export const historyService = {
         template_name: params.template_name,
         description: params.description,
         sending_type: 'bulk',
-        status: 'success',
+        status: hasWarnings ? 'warning' : 'success',
+        warning_message: hasWarnings ? `${params.warningCount} número(s) com ressalva: ${params.warningMessage}` : null,
         total_sent: params.total_sent,
         phone_list: params.phone_list ? JSON.stringify(params.phone_list) : null,
       })
