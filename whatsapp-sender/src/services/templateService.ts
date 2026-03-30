@@ -61,6 +61,12 @@ export const templateService = {
         parameter_4: formData.parameter_4 || null,
         parameter_5: formData.parameter_5 || null,
         parameter_6: formData.parameter_6 || null,
+        parameter_7: formData.parameter_7 || null,
+        parameter_8: formData.parameter_8 || null,
+        parameter_9: formData.parameter_9 || null,
+        parameter_10: formData.parameter_10 || null,
+        parameter_11: formData.parameter_11 || null,
+        parameter_12: formData.parameter_12 || null,
         image_url: imageUrl,
       })
       .select()
@@ -110,6 +116,12 @@ export const templateService = {
       parameter_4: formData.parameter_4 || null,
       parameter_5: formData.parameter_5 || null,
       parameter_6: formData.parameter_6 || null,
+      parameter_7: formData.parameter_7 || null,
+      parameter_8: formData.parameter_8 || null,
+      parameter_9: formData.parameter_9 || null,
+      parameter_10: formData.parameter_10 || null,
+      parameter_11: formData.parameter_11 || null,
+      parameter_12: formData.parameter_12 || null,
     };
 
     if (imageUpdated) {
@@ -146,6 +158,12 @@ export const templateService = {
     if (template.parameter_4) params.push(template.parameter_4);
     if (template.parameter_5) params.push(template.parameter_5);
     if (template.parameter_6) params.push(template.parameter_6);
+    if (template.parameter_7) params.push(template.parameter_7);
+    if (template.parameter_8) params.push(template.parameter_8);
+    if (template.parameter_9) params.push(template.parameter_9);
+    if (template.parameter_10) params.push(template.parameter_10);
+    if (template.parameter_11) params.push(template.parameter_11);
+    if (template.parameter_12) params.push(template.parameter_12);
     return params;
   },
 

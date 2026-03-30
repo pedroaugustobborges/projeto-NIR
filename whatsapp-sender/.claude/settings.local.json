@@ -5,7 +5,8 @@
       "Bash(git add:*)",
       "Bash(git check-ignore:*)",
       "Bash(git commit -m \"$\\(cat <<''EOF''\nFix Vercel build - add index.html and remove node_modules from git\n\n- Add index.html entry point \\(was ignored by *.html rule\\)\n- Add whatsapp.svg favicon to public directory\n- Update .gitignore to allow whatsapp-sender/index.html\n- Remove node_modules from git tracking \\(should never be committed\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(npm run build:*)"
     ]
   }
 }

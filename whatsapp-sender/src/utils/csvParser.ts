@@ -134,6 +134,12 @@ function validateCSVData(
       param_4: row[4]?.trim(),
       param_5: row[5]?.trim(),
       param_6: row[6]?.trim(),
+      param_7: row[7]?.trim(),
+      param_8: row[8]?.trim(),
+      param_9: row[9]?.trim(),
+      param_10: row[10]?.trim(),
+      param_11: row[11]?.trim(),
+      param_12: row[12]?.trim(),
     });
   }
 
@@ -155,6 +161,12 @@ function getParameterName(template: Template, index: number): string {
     case 4: return template.parameter_4 || `Parâmetro ${index}`;
     case 5: return template.parameter_5 || `Parâmetro ${index}`;
     case 6: return template.parameter_6 || `Parâmetro ${index}`;
+    case 7: return template.parameter_7 || `Parâmetro ${index}`;
+    case 8: return template.parameter_8 || `Parâmetro ${index}`;
+    case 9: return template.parameter_9 || `Parâmetro ${index}`;
+    case 10: return template.parameter_10 || `Parâmetro ${index}`;
+    case 11: return template.parameter_11 || `Parâmetro ${index}`;
+    case 12: return template.parameter_12 || `Parâmetro ${index}`;
     default: return `Parâmetro ${index}`;
   }
 }

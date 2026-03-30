@@ -126,9 +126,11 @@ export default function DashboardPage() {
 
       // Filter history by user's hospitals (via template's hospital_id)
       const filteredHistory = isAdmin
-        ? (historyData || [])
+        ? historyData || []
         : (historyData || []).filter((item) => {
-            const template = allTemplates.find((t) => t.id === item.template_id);
+            const template = allTemplates.find(
+              (t) => t.id === item.template_id,
+            );
             if (!template?.hospital_id) return true; // Show items without hospital
             return userHospitals.includes(template.hospital_id);
           });
@@ -309,9 +311,9 @@ export default function DashboardPage() {
   // Hospital options for filter (filtered by user's access)
   const hospitalOptions = [
     { value: "", label: "Todos" },
-    ...HOSPITALS
-      .filter((h) => isAdmin || userHospitals.includes(h.id))
-      .map((h) => ({ value: h.id, label: h.name })),
+    ...HOSPITALS.filter((h) => isAdmin || userHospitals.includes(h.id)).map(
+      (h) => ({ value: h.id, label: h.name }),
+    ),
   ];
 
   // Template options for filter

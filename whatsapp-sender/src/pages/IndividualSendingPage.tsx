@@ -79,6 +79,18 @@ export default function IndividualSendingPage() {
       params.push({ key: template.parameter_5, label: template.parameter_5 });
     if (template.parameter_6)
       params.push({ key: template.parameter_6, label: template.parameter_6 });
+    if (template.parameter_7)
+      params.push({ key: template.parameter_7, label: template.parameter_7 });
+    if (template.parameter_8)
+      params.push({ key: template.parameter_8, label: template.parameter_8 });
+    if (template.parameter_9)
+      params.push({ key: template.parameter_9, label: template.parameter_9 });
+    if (template.parameter_10)
+      params.push({ key: template.parameter_10, label: template.parameter_10 });
+    if (template.parameter_11)
+      params.push({ key: template.parameter_11, label: template.parameter_11 });
+    if (template.parameter_12)
+      params.push({ key: template.parameter_12, label: template.parameter_12 });
     return params;
   };
 

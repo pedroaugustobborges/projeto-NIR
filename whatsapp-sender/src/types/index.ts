@@ -45,6 +45,12 @@ export interface Template {
   parameter_4?: string | null;
   parameter_5?: string | null;
   parameter_6?: string | null;
+  parameter_7?: string | null;
+  parameter_8?: string | null;
+  parameter_9?: string | null;
+  parameter_10?: string | null;
+  parameter_11?: string | null;
+  parameter_12?: string | null;
   image_url?: string | null;
   created_at: string;
   updated_at: string;
@@ -60,6 +66,12 @@ export interface TemplateFormData {
   parameter_4?: string;
   parameter_5?: string;
   parameter_6?: string;
+  parameter_7?: string;
+  parameter_8?: string;
+  parameter_9?: string;
+  parameter_10?: string;
+  parameter_11?: string;
+  parameter_12?: string;
   image?: File | string | null;
 }
 
@@ -97,6 +109,12 @@ export interface BulkSendingRow {
   param4?: string;
   param5?: string;
   param6?: string;
+  param7?: string;
+  param8?: string;
+  param9?: string;
+  param10?: string;
+  param11?: string;
+  param12?: string;
 }
 
 export interface BulkSendingData {
@@ -114,6 +132,12 @@ export interface CSVRow {
   param_4?: string;
   param_5?: string;
   param_6?: string;
+  param_7?: string;
+  param_8?: string;
+  param_9?: string;
+  param_10?: string;
+  param_11?: string;
+  param_12?: string;
 }
 
 // CSV Validation

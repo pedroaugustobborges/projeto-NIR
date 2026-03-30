@@ -17,6 +17,12 @@ const PARAMETER_LABELS = [
   'Parâmetro 4',
   'Parâmetro 5',
   'Parâmetro 6',
+  'Parâmetro 7',
+  'Parâmetro 8',
+  'Parâmetro 9',
+  'Parâmetro 10',
+  'Parâmetro 11',
+  'Parâmetro 12',
 ];
 
 export default function TemplateForm({
@@ -35,6 +41,12 @@ export default function TemplateForm({
     parameter_4: '',
     parameter_5: '',
     parameter_6: '',
+    parameter_7: '',
+    parameter_8: '',
+    parameter_9: '',
+    parameter_10: '',
+    parameter_11: '',
+    parameter_12: '',
     image: null,
   });
 
@@ -52,6 +64,12 @@ export default function TemplateForm({
         parameter_4: template.parameter_4 || '',
         parameter_5: template.parameter_5 || '',
         parameter_6: template.parameter_6 || '',
+        parameter_7: template.parameter_7 || '',
+        parameter_8: template.parameter_8 || '',
+        parameter_9: template.parameter_9 || '',
+        parameter_10: template.parameter_10 || '',
+        parameter_11: template.parameter_11 || '',
+        parameter_12: template.parameter_12 || '',
         image: template.image_url || null,
       });
     }
@@ -77,6 +95,12 @@ export default function TemplateForm({
     if (formData.parameter_3?.trim()) count = 4;
     if (formData.parameter_4?.trim()) count = 5;
     if (formData.parameter_5?.trim()) count = 6;
+    if (formData.parameter_6?.trim()) count = 7;
+    if (formData.parameter_7?.trim()) count = 8;
+    if (formData.parameter_8?.trim()) count = 9;
+    if (formData.parameter_9?.trim()) count = 10;
+    if (formData.parameter_10?.trim()) count = 11;
+    if (formData.parameter_11?.trim()) count = 12;
 
     return count;
   };
@@ -123,6 +147,12 @@ export default function TemplateForm({
     { key: 'parameter_4', value: formData.parameter_4 },
     { key: 'parameter_5', value: formData.parameter_5 },
     { key: 'parameter_6', value: formData.parameter_6 },
+    { key: 'parameter_7', value: formData.parameter_7 },
+    { key: 'parameter_8', value: formData.parameter_8 },
+    { key: 'parameter_9', value: formData.parameter_9 },
+    { key: 'parameter_10', value: formData.parameter_10 },
+    { key: 'parameter_11', value: formData.parameter_11 },
+    { key: 'parameter_12', value: formData.parameter_12 },
   ];
 
   return (
@@ -188,16 +218,16 @@ export default function TemplateForm({
               onChange={(e) =>
                 handleChange(field.key as keyof TemplateFormData, e.target.value)
               }
-              placeholder={`Ex: ${['nome', 'data', 'hora', 'local', 'telefone', 'email'][index]}`}
-              hint={index === visibleParameters - 1 && index < 5 ? 'Preencha para habilitar o próximo parâmetro' : undefined}
+              placeholder={`Ex: ${['nome', 'data', 'hora', 'local', 'telefone', 'email', 'cpf', 'endereco', 'cidade', 'estado', 'cep', 'observacao'][index]}`}
+              hint={index === visibleParameters - 1 && index < 11 ? 'Preencha para habilitar o próximo parâmetro' : undefined}
               disabled={loading}
             />
           ))}
         </div>
 
-        {visibleParameters < 6 && (
+        {visibleParameters < 12 && (
           <p className="text-xs text-gray-400 dark:text-gray-500 italic">
-            Você pode adicionar até 6 parâmetros. Preencha o parâmetro atual para ver o próximo.
+            Você pode adicionar até 12 parâmetros. Preencha o parâmetro atual para ver o próximo.
           </p>
         )}
       </div>

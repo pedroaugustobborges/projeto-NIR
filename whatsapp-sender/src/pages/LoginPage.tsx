@@ -79,10 +79,10 @@ export default function LoginPage() {
               <MessageCircle className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              WhatsApp Sender
+              SDW
             </h1>
             <p className="text-gray-500 dark:text-gray-400 mt-2">
-              Sistema de Disparo de Mensagens
+              Sistema de Disparo de Whatsapp
             </p>
           </div>
 
@@ -208,7 +208,7 @@ export default function LoginPage() {
         <p className="text-center text-sm text-gray-400 dark:text-gray-500 mt-6">
           &copy; {new Date().getFullYear()} Agir Saúde. Todos os direitos
           reservados. <br />
-          Powered by daherlab
+          Powered by daher.lab
         </p>
       </div>
     </div>

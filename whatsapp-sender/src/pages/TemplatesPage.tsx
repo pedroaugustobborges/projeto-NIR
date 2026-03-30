@@ -200,6 +200,12 @@ export default function TemplatesPage() {
     if (template.parameter_4) count++;
     if (template.parameter_5) count++;
     if (template.parameter_6) count++;
+    if (template.parameter_7) count++;
+    if (template.parameter_8) count++;
+    if (template.parameter_9) count++;
+    if (template.parameter_10) count++;
+    if (template.parameter_11) count++;
+    if (template.parameter_12) count++;
     return count;
   };
 

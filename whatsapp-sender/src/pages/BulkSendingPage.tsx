@@ -134,6 +134,12 @@ export default function BulkSendingPage() {
         if (selectedTemplate.parameter_4 && row.param_4) parameters[selectedTemplate.parameter_4] = row.param_4;
         if (selectedTemplate.parameter_5 && row.param_5) parameters[selectedTemplate.parameter_5] = row.param_5;
         if (selectedTemplate.parameter_6 && row.param_6) parameters[selectedTemplate.parameter_6] = row.param_6;
+        if (selectedTemplate.parameter_7 && row.param_7) parameters[selectedTemplate.parameter_7] = row.param_7;
+        if (selectedTemplate.parameter_8 && row.param_8) parameters[selectedTemplate.parameter_8] = row.param_8;
+        if (selectedTemplate.parameter_9 && row.param_9) parameters[selectedTemplate.parameter_9] = row.param_9;
+        if (selectedTemplate.parameter_10 && row.param_10) parameters[selectedTemplate.parameter_10] = row.param_10;
+        if (selectedTemplate.parameter_11 && row.param_11) parameters[selectedTemplate.parameter_11] = row.param_11;
+        if (selectedTemplate.parameter_12 && row.param_12) parameters[selectedTemplate.parameter_12] = row.param_12;
 
         const sendResponse = await whatsappService.sendIndividual({
           phone: phoneDigits,
@@ -221,6 +227,12 @@ export default function BulkSendingPage() {
     ...(selectedTemplate?.parameter_4 ? [{ key: 'param_4', header: selectedTemplate.parameter_4 }] : []),
     ...(selectedTemplate?.parameter_5 ? [{ key: 'param_5', header: selectedTemplate.parameter_5 }] : []),
     ...(selectedTemplate?.parameter_6 ? [{ key: 'param_6', header: selectedTemplate.parameter_6 }] : []),
+    ...(selectedTemplate?.parameter_7 ? [{ key: 'param_7', header: selectedTemplate.parameter_7 }] : []),
+    ...(selectedTemplate?.parameter_8 ? [{ key: 'param_8', header: selectedTemplate.parameter_8 }] : []),
+    ...(selectedTemplate?.parameter_9 ? [{ key: 'param_9', header: selectedTemplate.parameter_9 }] : []),
+    ...(selectedTemplate?.parameter_10 ? [{ key: 'param_10', header: selectedTemplate.parameter_10 }] : []),
+    ...(selectedTemplate?.parameter_11 ? [{ key: 'param_11', header: selectedTemplate.parameter_11 }] : []),
+    ...(selectedTemplate?.parameter_12 ? [{ key: 'param_12', header: selectedTemplate.parameter_12 }] : []),
   ];
 
   // Check if template has proper Colmeia configuration

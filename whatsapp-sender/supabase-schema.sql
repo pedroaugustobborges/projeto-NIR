@@ -14,6 +14,12 @@ CREATE TABLE IF NOT EXISTS templates (
   parameter_4 VARCHAR(100),
   parameter_5 VARCHAR(100),
   parameter_6 VARCHAR(100),
+  parameter_7 VARCHAR(100),
+  parameter_8 VARCHAR(100),
+  parameter_9 VARCHAR(100),
+  parameter_10 VARCHAR(100),
+  parameter_11 VARCHAR(100),
+  parameter_12 VARCHAR(100),
   image_url TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
