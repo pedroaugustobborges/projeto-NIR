@@ -66,7 +66,7 @@ const adminNavigation = [
 ];
 
 export default function Sidebar() {
-  const { user, logout, isAdmin, userHospitals } = useAuth();
+  const { user, logout, isAdmin, isUnitAdmin, userHospitals } = useAuth();
   const { toggleTheme, isDark } = useTheme();
   const navigate = useNavigate();
 
@@ -257,7 +257,7 @@ export default function Sidebar() {
           </NavLink>
         ))}
 
-        {/* Admin Navigation */}
+        {/* Admin Navigation — full admins see Templates + Users */}
         {isAdmin && (
           <>
             <div className="mt-6 mb-2">
@@ -281,6 +281,30 @@ export default function Sidebar() {
                 <span>{item.name}</span>
               </NavLink>
             ))}
+          </>
+        )}
+
+        {/* Unit Admin Navigation — only Users page */}
+        {isUnitAdmin && (
+          <>
+            <div className="mt-6 mb-2">
+              <p className="px-4 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                Administração
+              </p>
+            </div>
+            <NavLink
+              to="/users"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-4 py-3 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white transition-all duration-200 ${
+                  isActive
+                    ? "bg-whatsapp-light/10 dark:bg-whatsapp-light/20 text-whatsapp-dark dark:text-whatsapp-light font-medium"
+                    : ""
+                }`
+              }
+            >
+              <UserCog className="w-5 h-5" />
+              <span>Usuários</span>
+            </NavLink>
           </>
         )}
       </nav>
@@ -320,7 +344,11 @@ export default function Sidebar() {
               {user?.name || "Usuário"}
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-              {user?.role === "admin" ? "Administrador" : "Usuário"}
+              {user?.role === "admin"
+                ? "Administrador Corporativo"
+                : user?.role === "unit_admin"
+                ? "Admin de Unidade"
+                : "Usuário"}
             </p>
           </div>
         </button>
@@ -448,10 +476,16 @@ export default function Sidebar() {
                     className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                       isAdmin
                         ? "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400"
+                        : isUnitAdmin
+                        ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
                         : "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
                     }`}
                   >
-                    {isAdmin ? "Administrador" : "Usuário"}
+                    {isAdmin
+                      ? "Administrador Corporativo"
+                      : isUnitAdmin
+                      ? "Admin de Unidade"
+                      : "Usuário"}
                   </span>
                 </div>
               </div>

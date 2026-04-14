@@ -5,11 +5,13 @@
 
 import { supabase } from './supabase';
 
+export type UserRole = 'admin' | 'unit_admin' | 'user';
+
 export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'user';
+  role: UserRole;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -20,14 +22,14 @@ export interface CreateUserData {
   email: string;
   password: string;
   name: string;
-  role: 'admin' | 'user';
+  role: UserRole;
   hospitals?: string[]; // Hospital IDs to assign
 }
 
 export interface UpdateUserData {
   email?: string;
   name?: string;
-  role?: 'admin' | 'user';
+  role?: UserRole;
   is_active?: boolean;
   password?: string;
   hospitals?: string[]; // Hospital IDs to assign (replaces existing)
@@ -241,7 +243,7 @@ export const userService = {
 
     // Update hospital assignments if provided
     if (userData.hospitals !== undefined) {
-      // If user is admin, clear hospital assignments (admins have access to all)
+      // Only full admins bypass hospital assignments (they access everything)
       const hospitalIds = userData.role === 'admin' ? [] : userData.hospitals;
       await this.setUserHospitals(id, hospitalIds);
     }

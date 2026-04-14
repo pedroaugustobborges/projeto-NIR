@@ -8,6 +8,7 @@ interface AuthContextType {
   logout: () => void;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  isUnitAdmin: boolean;
   userHospitals: string[]; // Hospital IDs the user has access to
   hasHospitalAccess: (hospitalId: string | null | undefined) => boolean; // Check if user can access a hospital
   filterByUserHospitals: <T extends { hospital_id?: string | null }>(items: T[]) => T[]; // Filter items by user's hospitals
@@ -63,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Get user's hospitals (admin has access to all)
   const userHospitals = user?.hospitals || [];
   const isAdmin = user?.role === 'admin';
+  const isUnitAdmin = user?.role === 'unit_admin';
 
   // Check if user has access to a specific hospital
   const hasHospitalAccess = useCallback((hospitalId: string | null | undefined): boolean => {
@@ -94,6 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout,
     isAuthenticated: !!user,
     isAdmin,
+    isUnitAdmin,
     userHospitals,
     hasHospitalAccess,
     filterByUserHospitals,

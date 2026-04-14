@@ -30,7 +30,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-// Admin Route wrapper
+// Admin Route wrapper — only full (corporate) admins
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const { isAdmin, isLoading } = useAuth();
 
@@ -46,6 +46,28 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (!isAdmin) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+// Users Route wrapper — admins and unit admins can access user management
+function UsersRoute({ children }: { children: React.ReactNode }) {
+  const { isAdmin, isUnitAdmin, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-whatsapp-light"></div>
+          <p className="text-gray-500 dark:text-gray-400">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAdmin && !isUnitAdmin) {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -129,9 +151,9 @@ function App() {
         path="/users"
         element={
           <ProtectedRoute>
-            <AdminRoute>
+            <UsersRoute>
               <UsersPage />
-            </AdminRoute>
+            </UsersRoute>
           </ProtectedRoute>
         }
       />

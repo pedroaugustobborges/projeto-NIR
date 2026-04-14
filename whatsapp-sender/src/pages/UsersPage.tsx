@@ -13,12 +13,19 @@ import {
   Building2,
 } from 'lucide-react';
 import Layout from '@/components/layout/Layout';
-import { User, userService, CreateUserData, UpdateUserData } from '@/services/userService';
+import { User, UserRole, userService, CreateUserData, UpdateUserData } from '@/services/userService';
 import { useAuth } from '@/contexts/AuthContext';
 import { HOSPITALS } from '@/types';
 import toast from 'react-hot-toast';
 
 type ModalMode = 'create' | 'edit' | 'delete' | null;
+
+// Human-readable role labels (pt-BR)
+const ROLE_LABELS: Record<UserRole, string> = {
+  admin: 'Administrador Corporativo',
+  unit_admin: 'Admin de Unidade',
+  user: 'Usuário',
+};
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -28,7 +35,12 @@ export default function UsersPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, isAdmin, isUnitAdmin, userHospitals } = useAuth();
+
+  // Hospitals this operator can assign to new users
+  const assignableHospitals = isAdmin
+    ? HOSPITALS
+    : HOSPITALS.filter(h => userHospitals.includes(h.id));
 
   // Form state
   const [formData, setFormData] = useState({
@@ -36,7 +48,7 @@ export default function UsersPage() {
     name: '',
     password: '',
     confirmPassword: '',
-    role: 'user' as 'admin' | 'user',
+    role: 'user' as UserRole,
     hospitals: [] as string[],
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -48,7 +60,17 @@ export default function UsersPage() {
   const loadUsers = async () => {
     setIsLoading(true);
     const data = await userService.getAll();
-    setUsers(data);
+
+    // unit_admin only sees non-corporate-admin users from their own hospitals
+    const filtered = isUnitAdmin
+      ? data.filter(
+          u =>
+            u.role !== 'admin' &&
+            u.hospitals?.some(h => userHospitals.includes(h))
+        )
+      : data;
+
+    setUsers(filtered);
     setIsLoading(false);
   };
 
@@ -141,8 +163,8 @@ export default function UsersPage() {
       }
     }
 
-    // Require at least one hospital for non-admin users
-    if (formData.role === 'user' && formData.hospitals.length === 0) {
+    // Require at least one hospital for non-corporate-admin users
+    if (formData.role !== 'admin' && formData.hospitals.length === 0) {
       errors.hospitals = 'Selecione pelo menos um hospital';
     }
 
@@ -227,6 +249,44 @@ export default function UsersPage() {
     });
   };
 
+  // Roles available when creating/editing (unit_admin cannot create corporate admins)
+  const availableRoles: UserRole[] = isAdmin
+    ? ['admin', 'unit_admin', 'user']
+    : ['unit_admin', 'user'];
+
+  const getRoleBadgeClass = (role: UserRole) => {
+    switch (role) {
+      case 'admin':
+        return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400';
+      case 'unit_admin':
+        return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400';
+      default:
+        return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
+    }
+  };
+
+  const getRoleIcon = (role: UserRole) => {
+    switch (role) {
+      case 'admin':
+        return <Shield className="w-5 h-5 text-purple-600 dark:text-purple-400" />;
+      case 'unit_admin':
+        return <Building2 className="w-5 h-5 text-amber-600 dark:text-amber-400" />;
+      default:
+        return <UserIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />;
+    }
+  };
+
+  const getRoleAvatarClass = (role: UserRole) => {
+    switch (role) {
+      case 'admin':
+        return 'bg-purple-100 dark:bg-purple-900/30';
+      case 'unit_admin':
+        return 'bg-amber-100 dark:bg-amber-900/30';
+      default:
+        return 'bg-gray-100 dark:bg-gray-700';
+    }
+  };
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -237,7 +297,9 @@ export default function UsersPage() {
               Usuários
             </h1>
             <p className="text-gray-500 dark:text-gray-400 mt-1">
-              Gerencie os usuários do sistema
+              {isUnitAdmin
+                ? 'Gerencie os usuários dos seus hospitais'
+                : 'Gerencie os usuários do sistema'}
             </p>
           </div>
           <button onClick={openCreateModal} className="btn-primary">
@@ -293,17 +355,9 @@ export default function UsersPage() {
                       <td className="py-4 px-4">
                         <div className="flex items-center gap-3">
                           <div
-                            className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                              user.role === 'admin'
-                                ? 'bg-purple-100 dark:bg-purple-900/30'
-                                : 'bg-gray-100 dark:bg-gray-700'
-                            }`}
+                            className={`w-10 h-10 rounded-full flex items-center justify-center ${getRoleAvatarClass(user.role)}`}
                           >
-                            {user.role === 'admin' ? (
-                              <Shield className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                            ) : (
-                              <UserIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                            )}
+                            {getRoleIcon(user.role)}
                           </div>
                           <div>
                             <p className="font-medium text-gray-900 dark:text-white">
@@ -317,13 +371,9 @@ export default function UsersPage() {
                       </td>
                       <td className="py-4 px-4">
                         <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
-                            user.role === 'admin'
-                              ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                              : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
-                          }`}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${getRoleBadgeClass(user.role)}`}
                         >
-                          {user.role === 'admin' ? 'Administrador' : 'Usuário'}
+                          {ROLE_LABELS[user.role]}
                         </span>
                       </td>
                       <td className="py-4 px-4">
@@ -531,22 +581,26 @@ export default function UsersPage() {
                 <label className="label dark:text-gray-300">Perfil</label>
                 <select
                   value={formData.role}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const newRole = e.target.value as UserRole;
                     setFormData({
                       ...formData,
-                      role: e.target.value as 'admin' | 'user',
-                      hospitals: e.target.value === 'admin' ? [] : formData.hospitals,
-                    })
-                  }
+                      role: newRole,
+                      hospitals: newRole === 'admin' ? [] : formData.hospitals,
+                    });
+                  }}
                   className="input dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                 >
-                  <option value="user">Usuário</option>
-                  <option value="admin">Administrador</option>
+                  {availableRoles.map(role => (
+                    <option key={role} value={role}>
+                      {ROLE_LABELS[role]}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              {/* Hospitals (only for non-admin users) */}
-              {formData.role === 'user' && (
+              {/* Hospitals (for unit_admin and user roles) */}
+              {formData.role !== 'admin' && (
                 <div>
                   <label className="label dark:text-gray-300">
                     Hospitais
@@ -555,7 +609,7 @@ export default function UsersPage() {
                     </span>
                   </label>
                   <div className="space-y-2 mt-2">
-                    {HOSPITALS.map((hospital) => (
+                    {assignableHospitals.map((hospital) => (
                       <label
                         key={hospital.id}
                         className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
@@ -593,9 +647,18 @@ export default function UsersPage() {
 
               {formData.role === 'admin' && (
                 <div className="flex items-center gap-2 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
-                  <Shield className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                  <Shield className="w-5 h-5 text-purple-600 dark:text-purple-400 shrink-0" />
                   <span className="text-sm text-purple-700 dark:text-purple-300">
-                    Administradores têm acesso a todos os hospitais e funcionalidades
+                    Administradores Corporativos têm acesso a todos os hospitais e funcionalidades do sistema
+                  </span>
+                </div>
+              )}
+
+              {formData.role === 'unit_admin' && (
+                <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                  <Building2 className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span className="text-sm text-amber-700 dark:text-amber-300">
+                    Admins de Unidade podem gerenciar usuários dos hospitais aos quais estão vinculados
                   </span>
                 </div>
               )}
